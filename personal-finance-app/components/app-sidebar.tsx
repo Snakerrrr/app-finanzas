@@ -11,12 +11,14 @@ import {
   CheckCircle2,
   Settings,
   FolderKanban,
+  Search,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const menuItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/movimientos", label: "Movimientos", icon: ArrowLeftRight },
+  { href: "/busqueda", label: "Búsqueda Inteligente", icon: Search },
   { href: "/presupuestos", label: "Presupuestos", icon: PiggyBank },
   { href: "/tarjetas", label: "Tarjetas de Crédito", icon: CreditCard },
   { href: "/metas", label: "Metas de Ahorro", icon: Target },

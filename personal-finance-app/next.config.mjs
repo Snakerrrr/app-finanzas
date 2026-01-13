@@ -28,7 +28,15 @@ const nextConfig = {
     // Ignorar advertencias de webpack sobre módulos no encontrados
     config.ignoreWarnings = [
       { module: /node_modules\/@xenova\/transformers/ },
+      { module: /node_modules\/@mlc-ai\/web-llm/ },
     ]
+    
+    // Configuración para WebLLM (necesita acceso a archivos estáticos)
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+      }
+    }
 
     return config
   },

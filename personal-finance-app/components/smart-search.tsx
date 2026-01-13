@@ -1,66 +1,51 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Search, Send, Loader2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Search, Send, Brain, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
-import { aiService } from '@/lib/ai-service'
-import { mapIntentToQuery } from '@/lib/search-mapper'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useLocalBrain } from '@/hooks/use-local-brain'
+import { executeDatabaseQuery } from '@/lib/query-executor'
 import type { Transaction } from '@/lib/db'
 import { useData } from '@/lib/data-context'
 
 export function SmartSearch() {
   const { categorias } = useData()
+  const { isLoading, isReady, progress, error, askDatabase } = useLocalBrain()
   const [query, setQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isModelLoading, setIsModelLoading] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
   const [results, setResults] = useState<Transaction[]>([])
   const [message, setMessage] = useState<string | null>(null)
-  const [isInitialized, setIsInitialized] = useState(true) // Ya inicializado por data-context
+  const [searchError, setSearchError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Cargar modelo de IA al montar (pre-carga)
-  useEffect(() => {
-    const loadModel = async () => {
-      if (!aiService.isModelLoaded()) {
-        setIsModelLoading(true)
-        try {
-          await aiService.loadModel()
-        } catch (error) {
-          console.error('Error al cargar el modelo de IA:', error)
-        } finally {
-          setIsModelLoading(false)
-        }
-      }
-    }
-
-    loadModel()
-  }, [])
-
   const handleSearch = async () => {
-    if (!query.trim() || isLoading) return
+    if (!query.trim() || isSearching || !isReady) return
 
-    setIsLoading(true)
+    setIsSearching(true)
     setResults([])
     setMessage(null)
+    setSearchError(null)
 
     try {
-      // Clasificar intención con IA (pasar categorías del usuario para mapeo dinámico)
-      const classification = await aiService.classifyIntent(query, categorias)
+      // Consultar al modelo LLM
+      const dbQuery = await askDatabase(query)
       
-      // Mapear intención a consulta de base de datos
-      const searchResult = await mapIntentToQuery(classification)
+      // Ejecutar la consulta en Dexie (pasar categorías para mapeo dinámico)
+      const queryResult = await executeDatabaseQuery(dbQuery, categorias)
       
-      setResults(searchResult.transactions)
-      setMessage(searchResult.message || null)
+      setResults(queryResult.transactions)
+      setMessage(queryResult.message)
     } catch (error) {
       console.error('Error en la búsqueda:', error)
-      setMessage('Ocurrió un error al procesar tu búsqueda. Intenta nuevamente.')
+      setSearchError(error instanceof Error ? error.message : 'Ocurrió un error al procesar tu búsqueda')
     } finally {
-      setIsLoading(false)
+      setIsSearching(false)
     }
   }
 
@@ -110,19 +95,48 @@ export function SmartSearch() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Search className="size-5" />
+            <Brain className="size-5" />
             Búsqueda Inteligente Privada
           </CardTitle>
           <CardDescription>
-            Busca tus finanzas usando lenguaje natural. Todo se procesa localmente en tu navegador.
+            Busca tus finanzas usando lenguaje natural con IA local (Phi-3.5-mini). 
+            Todo se procesa en tu navegador con WebGPU.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Estado de carga del modelo */}
-          {isModelLoading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/50 rounded-md">
-              <Loader2 className="size-4 animate-spin" />
-              <span>Cargando modelo de IA...</span>
+          {/* Barra de progreso de carga del modelo */}
+          {isLoading && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{progress.text}</span>
+                <span className="font-medium">{progress.progress}%</span>
+              </div>
+              <Progress value={progress.progress} className="h-3" />
+              <p className="text-xs text-muted-foreground">
+                Descargando modelo Phi-3.5-mini (~1GB). Esto solo ocurre la primera vez.
+              </p>
+            </div>
+          )}
+
+          {/* Error de carga del modelo */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="size-4" />
+              <AlertDescription>
+                Error al cargar el modelo: {error}
+                <br />
+                <span className="text-xs mt-1 block">
+                  Asegúrate de tener WebGPU habilitado en tu navegador (Chrome/Edge recomendado)
+                </span>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Estado listo */}
+          {isReady && !isLoading && (
+            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 p-2 bg-green-50 dark:bg-green-950/20 rounded-md">
+              <Brain className="size-4" />
+              <span>Modelo listo. Puedes hacer consultas en lenguaje natural.</span>
             </div>
           )}
 
@@ -131,21 +145,21 @@ export function SmartSearch() {
             <Input
               ref={inputRef}
               type="text"
-              placeholder="Ej: ver gastos, ver ingresos, gastos en comida, ver saldo..."
+              placeholder="Ej: ver gastos, ingresos de esta semana, gastos en comida, ver saldo..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyPress={handleKeyPress}
-              disabled={isLoading || isModelLoading || !isInitialized}
+              disabled={isSearching || !isReady || isLoading}
               className="flex-1"
             />
             <Button
               onClick={handleSearch}
-              disabled={isLoading || isModelLoading || !isInitialized || !query.trim()}
+              disabled={isSearching || !isReady || isLoading || !query.trim()}
             >
-              {isLoading ? (
+              {isSearching ? (
                 <>
                   <Spinner className="size-4" />
-                  <span className="sr-only">Buscando...</span>
+                  <span className="sr-only">Analizando...</span>
                 </>
               ) : (
                 <>
@@ -156,8 +170,24 @@ export function SmartSearch() {
             </Button>
           </div>
 
+          {/* Estado de análisis */}
+          {isSearching && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-muted/50 rounded-md">
+              <Spinner className="size-4 animate-spin" />
+              <span>Analizando consulta con IA...</span>
+            </div>
+          )}
+
+          {/* Error de búsqueda */}
+          {searchError && (
+            <Alert variant="destructive">
+              <AlertCircle className="size-4" />
+              <AlertDescription>{searchError}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Mensaje de resultado */}
-          {message && (
+          {message && !searchError && (
             <div className="p-3 bg-muted/50 rounded-md text-sm">
               {message}
             </div>
@@ -203,15 +233,15 @@ export function SmartSearch() {
           )}
 
           {/* Estado vacío */}
-          {!isLoading && results.length === 0 && message && message.includes('No pude entender') && (
+          {!isSearching && results.length === 0 && message && !searchError && (
             <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">Intenta con frases como:</p>
-              <ul className="mt-2 space-y-1 text-sm">
-                <li>• "ver gastos"</li>
-                <li>• "ver ingresos"</li>
-                <li>• "ver saldo"</li>
-                <li>• "gastos en comida"</li>
-                <li>• "gastos en transporte"</li>
+              <p className="text-sm">No se encontraron transacciones.</p>
+              <p className="text-xs mt-2">Intenta con otras consultas como:</p>
+              <ul className="mt-2 space-y-1 text-xs">
+                <li>• "ver todos los gastos"</li>
+                <li>• "ingresos de este mes"</li>
+                <li>• "gastos en supermercado"</li>
+                <li>• "transacciones de la semana pasada"</li>
               </ul>
             </div>
           )}

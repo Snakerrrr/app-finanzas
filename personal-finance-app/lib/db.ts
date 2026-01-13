@@ -40,6 +40,20 @@ function movimientoToTransaction(mov: Movimiento): Transaction {
   }
 }
 
+// Función para convertir Transaction a Movimiento
+export function transactionToMovimiento(tx: Transaction): Omit<Movimiento, 'id'> {
+  return {
+    fecha: tx.date,
+    descripcion: tx.description,
+    tipoMovimiento: tx.type === 'income' ? 'Ingreso' : tx.type === 'expense' ? 'Gasto' : 'Transferencia',
+    categoriaId: tx.category,
+    montoCLP: tx.amount,
+    metodoPago: tx.metodoPago || 'Efectivo',
+    estadoConciliacion: 'Pendiente',
+    mesConciliacion: tx.date.substring(0, 7) // YYYY-MM
+  }
+}
+
 // Función para sincronizar movimientos del usuario a Dexie
 export async function syncMovimientosToDexie(movimientos: Movimiento[]): Promise<void> {
   try {

@@ -6,14 +6,32 @@ import type { Categoria } from './types'
 import { 
   getAllTransactions, 
   getTransactionsByType,
-  getTransactionsByCategory 
+  getTransactionsByCategory,
+  db
 } from './db'
+
+// Re-exportar el tipo para uso en este módulo
+export type { DatabaseQuery } from '@/hooks/use-local-brain'
+
+// Datos agrupados para visualización
+export interface GroupedData {
+  label: string // Nombre de la categoría o fecha
+  value: number // Total agrupado
+  count?: number // Cantidad de transacciones en el grupo
+}
 
 // Resultado de la ejecución de la consulta
 export interface QueryResult {
   transactions: Transaction[]
   total?: number
+  count?: number
+  operation?: 'LIST' | 'SUM_TOTAL' | 'COUNT' | 'CREATE'
   message: string
+  groupedData?: GroupedData[] // Datos agrupados para gráficos
+  visualization?: 'table' | 'pie_chart' | 'bar_chart' | 'single_value'
+  groupBy?: 'category' | 'date' | null
+  createdTransaction?: Transaction // Transacción creada (solo para create_transaction)
+  status?: 'success' | 'error' // Estado de la operación
 }
 
 /**
@@ -34,19 +52,28 @@ export async function executeDatabaseQuery(
         return await executeGetSummary()
       
       case 'filter_transactions':
-        return await executeFilterTransactions(query.filters, categorias)
+        return await executeFilterTransactions(query, categorias)
+      
+      case 'create_transaction':
+        return await executeCreateTransaction(query, categorias)
       
       default:
         return {
           transactions: [],
-          message: 'Intención no reconocida'
+          operation: 'LIST',
+          message: 'Intención no reconocida',
+          visualization: 'table',
+          status: 'error'
         }
     }
   } catch (error) {
     console.error('Error al ejecutar consulta:', error)
     return {
       transactions: [],
-      message: 'Error al ejecutar la consulta'
+      message: 'Error al ejecutar la consulta',
+      operation: 'LIST',
+      visualization: 'table',
+      status: 'error'
     }
   }
 }
@@ -71,7 +98,9 @@ async function executeGetBalance(): Promise<QueryResult> {
   return {
     transactions: recentTransactions,
     total: balance,
-    message: `Saldo total: $${balance.toLocaleString('es-CL')}`
+    operation: 'SUM_TOTAL',
+    message: `Saldo total: $${balance.toLocaleString('es-CL')}`,
+    visualization: 'single_value'
   }
 }
 
@@ -92,7 +121,9 @@ async function executeGetSummary(): Promise<QueryResult> {
   return {
     transactions: allTransactions.slice(0, 10), // Mostrar primeras 10
     total: ingresos - gastos,
-    message: `Resumen: Ingresos $${ingresos.toLocaleString('es-CL')} - Gastos $${gastos.toLocaleString('es-CL')} = Saldo $${(ingresos - gastos).toLocaleString('es-CL')}`
+    operation: 'SUM_TOTAL',
+    message: `Resumen: Ingresos $${ingresos.toLocaleString('es-CL')} - Gastos $${gastos.toLocaleString('es-CL')} = Saldo $${(ingresos - gastos).toLocaleString('es-CL')}`,
+    visualization: 'single_value'
   }
 }
 
@@ -100,9 +131,10 @@ async function executeGetSummary(): Promise<QueryResult> {
  * Filtra transacciones según los filtros proporcionados
  */
 async function executeFilterTransactions(
-  filters: DatabaseQuery['filters'],
+  query: DatabaseQuery,
   categorias?: Categoria[]
 ): Promise<QueryResult> {
+  const filters = query.filters
   let transactions: Transaction[] = []
 
   // Mapear nombre de categoría a ID si tenemos categorías del usuario
@@ -171,36 +203,223 @@ async function executeFilterTransactions(
     transactions = transactions.filter(tx => tx.amount <= filters.maxAmount!)
   }
 
-  // Calcular total
-  const total = transactions.reduce((sum, tx) => {
-    if (filters.type === 'expense') return sum + tx.amount
-    if (filters.type === 'income') return sum + tx.amount
-    // Si no hay tipo, sumar ingresos y restar gastos
-    return tx.type === 'income' ? sum + tx.amount : sum - tx.amount
-  }, 0)
-
-  // Generar mensaje descriptivo
-  const filtersDesc: string[] = []
-  if (filters.type) filtersDesc.push(filters.type === 'expense' ? 'gastos' : 'ingresos')
-  if (filters.category) filtersDesc.push(`categoría "${filters.category}"`)
-  if (filters.startDate || filters.endDate) {
-    const dateRange = filters.startDate === filters.endDate 
-      ? filters.startDate 
-      : `${filters.startDate || 'inicio'} a ${filters.endDate || 'hoy'}`
-    filtersDesc.push(`fechas: ${dateRange}`)
+  // Determinar la operación solicitada
+  const operation = query.operation || 'LIST'
+  const groupBy = query.groupBy || null
+  const visualization = query.visualization || 'table'
+  
+  // Agrupar datos si es necesario
+  let groupedData: GroupedData[] | undefined = undefined
+  
+  if (groupBy && transactions.length > 0) {
+    const grouped = new Map<string, { total: number; count: number }>()
+    
+    transactions.forEach(tx => {
+      let key: string
+      
+      if (groupBy === 'category') {
+        // Agrupar por categoría
+        key = tx.category || 'Sin categoría'
+      } else if (groupBy === 'date') {
+        // Agrupar por fecha (formato YYYY-MM-DD)
+        key = tx.date
+      } else {
+        return
+      }
+      
+      const existing = grouped.get(key) || { total: 0, count: 0 }
+      existing.total += tx.amount
+      existing.count += 1
+      grouped.set(key, existing)
+    })
+    
+    // Convertir a array y ordenar
+    groupedData = Array.from(grouped.entries())
+      .map(([label, data]) => {
+        // Formatear fecha si es agrupación por fecha
+        let displayLabel = label
+        if (groupBy === 'date') {
+          try {
+            const date = new Date(label)
+            displayLabel = date.toLocaleDateString('es-CL', { 
+              month: 'short', 
+              day: 'numeric',
+              year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+            })
+          } catch {
+            displayLabel = label
+          }
+        }
+        
+        return {
+          label: displayLabel,
+          value: Math.abs(data.total),
+          count: data.count,
+          // Mantener la fecha original para ordenamiento
+          _sortKey: groupBy === 'date' ? label : undefined
+        }
+      })
+      .sort((a, b) => {
+        // Si es por fecha, ordenar cronológicamente
+        if (groupBy === 'date' && a._sortKey && b._sortKey) {
+          return a._sortKey.localeCompare(b._sortKey)
+        }
+        // Si es por categoría, ordenar por valor descendente
+        return b.value - a.value
+      })
+      .map(({ _sortKey, ...rest }) => rest) // Eliminar _sortKey del resultado final
   }
-  if (filters.minAmount) filtersDesc.push(`mínimo $${filters.minAmount.toLocaleString('es-CL')}`)
-  if (filters.maxAmount) filtersDesc.push(`máximo $${filters.maxAmount.toLocaleString('es-CL')}`)
+  
+  // Calcular según la operación
+  let resultTotal: number | undefined
+  let resultCount: number | undefined
+  let message: string
 
-  const filtersText = filtersDesc.length > 0 
-    ? filtersDesc.join(', ')
-    : 'todas las transacciones'
+  if (operation === 'SUM_TOTAL') {
+    resultTotal = transactions.reduce((sum, tx) => {
+      if (filters.type === 'expense') return sum + tx.amount
+      if (filters.type === 'income') return sum + tx.amount
+      // Si no hay tipo, sumar ingresos y restar gastos
+      return tx.type === 'income' ? sum + tx.amount : sum - tx.amount
+    }, 0)
+    
+    const filtersDesc: string[] = []
+    if (filters.type) filtersDesc.push(filters.type === 'expense' ? 'gastos' : 'ingresos')
+    if (filters.category) filtersDesc.push(`categoría "${filters.category}"`)
+    if (filters.startDate || filters.endDate) {
+      const dateRange = filters.startDate === filters.endDate 
+        ? filters.startDate 
+        : `${filters.startDate || 'inicio'} a ${filters.endDate || 'hoy'}`
+      filtersDesc.push(`fechas: ${dateRange}`)
+    }
+    
+    const filtersText = filtersDesc.length > 0 ? filtersDesc.join(', ') : 'todas las transacciones'
+    message = `Total ${filtersText}: $${Math.abs(resultTotal).toLocaleString('es-CL')}`
+    
+  } else if (operation === 'COUNT') {
+    resultCount = transactions.length
+    
+    const filtersDesc: string[] = []
+    if (filters.type) filtersDesc.push(filters.type === 'expense' ? 'gastos' : 'ingresos')
+    if (filters.category) filtersDesc.push(`categoría "${filters.category}"`)
+    if (filters.startDate || filters.endDate) {
+      const dateRange = filters.startDate === filters.endDate 
+        ? filters.startDate 
+        : `${filters.startDate || 'inicio'} a ${filters.endDate || 'hoy'}`
+      filtersDesc.push(`fechas: ${dateRange}`)
+    }
+    
+    const filtersText = filtersDesc.length > 0 ? filtersDesc.join(', ') : 'transacciones'
+    message = `${resultCount} ${filtersText} encontradas`
+    
+  } else {
+    // LIST (por defecto)
+    resultTotal = transactions.reduce((sum, tx) => {
+      if (filters.type === 'expense') return sum + tx.amount
+      if (filters.type === 'income') return sum + tx.amount
+      return tx.type === 'income' ? sum + tx.amount : sum - tx.amount
+    }, 0)
+    
+    const filtersDesc: string[] = []
+    if (filters.type) filtersDesc.push(filters.type === 'expense' ? 'gastos' : 'ingresos')
+    if (filters.category) filtersDesc.push(`categoría "${filters.category}"`)
+    if (filters.startDate || filters.endDate) {
+      const dateRange = filters.startDate === filters.endDate 
+        ? filters.startDate 
+        : `${filters.startDate || 'inicio'} a ${filters.endDate || 'hoy'}`
+      filtersDesc.push(`fechas: ${dateRange}`)
+    }
+    if (filters.minAmount) filtersDesc.push(`mínimo $${filters.minAmount.toLocaleString('es-CL')}`)
+    if (filters.maxAmount) filtersDesc.push(`máximo $${filters.maxAmount.toLocaleString('es-CL')}`)
 
-  const message = `${transactions.length} transacciones encontradas (${filtersText}). Total: $${Math.abs(total).toLocaleString('es-CL')}`
+    const filtersText = filtersDesc.length > 0 
+      ? filtersDesc.join(', ')
+      : 'todas las transacciones'
+
+    message = `${transactions.length} transacciones encontradas (${filtersText}). Total: $${Math.abs(resultTotal).toLocaleString('es-CL')}`
+  }
 
   return {
     transactions,
-    total,
-    message
+    total: resultTotal,
+    count: resultCount,
+    operation,
+    message,
+    groupedData,
+    visualization,
+    groupBy
+  }
+}
+
+/**
+ * Crea una nueva transacción basada en los datos generados por la IA
+ */
+async function executeCreateTransaction(
+  query: DatabaseQuery,
+  categorias?: Categoria[]
+): Promise<QueryResult> {
+  if (!query.createData) {
+    throw new Error('No se proporcionaron datos para crear la transacción')
+  }
+
+  const { amount, category, description, type, date } = query.createData
+
+  // Mapear nombre de categoría a ID si tenemos categorías del usuario
+  let categoryId: string = category
+  
+  if (categorias && categorias.length > 0) {
+    const categoryLower = category.toLowerCase()
+    const matchingCategoria = categorias.find(c => 
+      c.nombre.toLowerCase().includes(categoryLower) ||
+      categoryLower.includes(c.nombre.toLowerCase())
+    )
+    if (matchingCategoria) {
+      categoryId = matchingCategoria.id
+    } else {
+      // Si no encuentra coincidencia, usar la primera categoría disponible o crear una por defecto
+      const defaultCategory = categorias.find(c => 
+        c.nombre.toLowerCase() === 'otros' || 
+        c.nombre.toLowerCase() === 'otro' ||
+        c.nombre.toLowerCase() === 'general'
+      )
+      categoryId = defaultCategory?.id || categorias[0].id
+    }
+  }
+
+  // Crear la transacción en formato Transaction (para Dexie)
+  const transaction: Transaction = {
+    id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    amount: amount,
+    category: categoryId,
+    date: date,
+    type: type,
+    description: description
+  }
+
+  // Guardar en Dexie
+  try {
+    await db.transactions.add(transaction)
+    console.log('✅ Transacción creada en Dexie:', transaction)
+  } catch (error) {
+    console.error('Error al guardar transacción en Dexie:', error)
+    throw new Error('No se pudo guardar la transacción')
+  }
+
+  // Formatear mensaje de confirmación
+  const typeLabel = type === 'expense' ? 'Gasto' : 'Ingreso'
+  const amountFormatted = new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0
+  }).format(amount)
+
+  const categoryName = categorias?.find(c => c.id === categoryId)?.nombre || category
+
+  return {
+    transactions: [transaction],
+    operation: 'CREATE',
+    message: `${typeLabel} registrado: ${amountFormatted} en ${categoryName}`,
+    createdTransaction: transaction,
+    status: 'success'
   }
 }

@@ -1,0 +1,55 @@
+import type React from "react"
+import type { Metadata } from "next"
+import { Geist, Geist_Mono } from "next/font/google"
+import { Analytics } from "@vercel/analytics/next"
+import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/lib/auth-context"
+import { Toaster } from "@/components/ui/toaster"
+
+const _geist = Geist({ subsets: ["latin"] })
+const _geistMono = Geist_Mono({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "FinanzasCL - Gestión de Finanzas Personales",
+  description:
+    "Aplicación de finanzas personales para Chile con control de movimientos, presupuestos, tarjetas de crédito y metas de ahorro",
+  generator: "v0.app",
+  icons: {
+    icon: [
+      {
+        url: "/icon-light-32x32.png",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/icon-dark-32x32.png",
+        media: "(prefers-color-scheme: dark)",
+      },
+      {
+        url: "/icon.svg",
+        type: "image/svg+xml",
+      },
+    ],
+    apple: "/apple-icon.png",
+  },
+}
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
+  return (
+    <html lang="es-CL" suppressHydrationWarning>
+      <body className="font-sans antialiased">
+        <ThemeProvider defaultTheme="system" storageKey="finanzas-cl-theme">
+          <AuthProvider>
+            {children}
+            <Toaster />
+          </AuthProvider>
+          <Analytics />
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}

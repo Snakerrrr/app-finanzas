@@ -30,6 +30,36 @@ interface LocalBrainState {
   error: string | null
 }
 
+// ============================================================================
+// PATRÓN SINGLETON: Variables globales a nivel de módulo
+// ============================================================================
+
+// Instancia global del motor WebLLM (Singleton)
+let globalEngine: any = null
+
+// Estado global compartido entre todas las instancias del hook
+let globalState: LocalBrainState = {
+  isLoading: false,
+  isReady: false,
+  progress: { text: 'Inicializando...', progress: 0 },
+  error: null
+}
+
+// Flag para prevenir inicializaciones concurrentes
+let isInitializing = false
+
+// Promesa de inicialización compartida (para manejar concurrencia)
+let initializationPromise: Promise<any> | null = null
+
+// Callbacks de progreso registrados (para notificar a todos los componentes)
+const progressCallbacks = new Set<(state: LocalBrainState) => void>()
+
+// Función para notificar a todos los callbacks registrados
+function notifyProgressCallbacks(state: LocalBrainState) {
+  globalState = state
+  progressCallbacks.forEach(callback => callback(state))
+}
+
 // System prompt estricto para el modelo
 const SYSTEM_PROMPT = `Eres un traductor de lenguaje natural a consultas de base de datos JSON. 
 Tu única función es convertir consultas del usuario en objetos JSON válidos.
@@ -80,94 +110,144 @@ Usuario: "ver saldo" → {"intent":"get_balance","filters":{"type":null,"categor
 IMPORTANTE: Responde SOLO con el JSON, sin texto adicional.`
 
 /**
- * Hook personalizado para usar WebLLM con Phi-3.5-mini
+ * Inicializa el motor WebLLM globalmente (Singleton)
  */
-export function useLocalBrain() {
-  const [state, setState] = useState<LocalBrainState>({
-    isLoading: false,
+async function initializeGlobalEngine(): Promise<any> {
+  // Si ya existe, retornarlo inmediatamente
+  if (globalEngine) {
+    return globalEngine
+  }
+
+  // Si ya está inicializando, esperar a que termine
+  if (isInitializing && initializationPromise) {
+    return initializationPromise
+  }
+
+  // Marcar como inicializando
+  isInitializing = true
+  notifyProgressCallbacks({
+    isLoading: true,
     isReady: false,
-    progress: { text: 'Inicializando...', progress: 0 },
-    error: null
+    error: null,
+    progress: { text: 'Inicializando motor WebLLM...', progress: 0 }
   })
 
-  const engineRef = useRef<any>(null)
-
-  // Callback para actualizar el progreso
-  const initProgressCallback = useCallback((report: any) => {
-    const text = report.text || 'Cargando modelo...'
-    const progress = report.progress || 0
-    
-    setState(prev => ({
-      ...prev,
-      progress: {
-        text,
-        progress: Math.round(progress * 100)
+  // Crear la promesa de inicialización
+  initializationPromise = (async () => {
+    try {
+      // Callback de progreso que notifica a todos los componentes
+      const initProgressCallback = (report: any) => {
+        const text = report.text || 'Cargando modelo...'
+        const progress = Math.round((report.progress || 0) * 100)
+        
+        notifyProgressCallbacks({
+          ...globalState,
+          progress: { text, progress }
+        })
       }
-    }))
+
+      // Crear el motor con Phi-3.5-mini
+      const engine = await CreateMLCEngine(
+        'Phi-3.5-mini-instruct-q4f16_1-MLC',
+        {
+          initProgressCallback,
+        }
+      )
+
+      // Guardar la instancia global
+      globalEngine = engine
+      isInitializing = false
+      initializationPromise = null
+
+      // Notificar que está listo
+      notifyProgressCallbacks({
+        isLoading: false,
+        isReady: true,
+        error: null,
+        progress: { text: 'Modelo listo', progress: 100 }
+      })
+
+      return engine
+    } catch (error) {
+      isInitializing = false
+      initializationPromise = null
+      
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido al cargar el modelo'
+      
+      notifyProgressCallbacks({
+        isLoading: false,
+        isReady: false,
+        error: errorMessage,
+        progress: { text: 'Error al cargar', progress: 0 }
+      })
+
+      throw error
+    }
+  })()
+
+  return initializationPromise
+}
+
+/**
+ * Hook personalizado para usar WebLLM con Phi-3.5-mini (Singleton)
+ */
+export function useLocalBrain() {
+  // Estado local que se sincroniza con el estado global
+  const [state, setState] = useState<LocalBrainState>(globalState)
+  const engineRef = useRef<any>(globalEngine)
+
+  // Registrar callback de progreso
+  useEffect(() => {
+    const progressCallback = (newState: LocalBrainState) => {
+      setState(newState)
+    }
+    
+    progressCallbacks.add(progressCallback)
+    
+    // Sincronizar estado inicial
+    setState(globalState)
+    
+    return () => {
+      progressCallbacks.delete(progressCallback)
+    }
   }, [])
 
-  // Inicializar el motor de WebLLM
+  // Inicializar el motor (solo si no existe)
   useEffect(() => {
     let isMounted = true
 
-    const initializeEngine = async () => {
+    const initialize = async () => {
+      // CASO A: El motor ya existe y está listo
+      if (globalEngine && globalState.isReady) {
+        engineRef.current = globalEngine
+        setState(globalState)
+        return
+      }
+
+      // CASO B: El motor no existe, inicializarlo
       try {
-        setState(prev => ({
-          ...prev,
-          isLoading: true,
-          error: null,
-          progress: { text: 'Inicializando motor WebLLM...', progress: 0 }
-        }))
-
-        // Crear el motor con Phi-3.5-mini
-        // CreateMLCEngine espera: (modelName: string, options?: object)
-        const engine = await CreateMLCEngine(
-          'Phi-3.5-mini-instruct-q4f16_1-MLC',
-          {
-            initProgressCallback,
-          }
-        )
-
-        if (!isMounted) {
-          engine.unload()
-          return
-        }
-
-        engineRef.current = engine
-
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          isReady: true,
-          progress: { text: 'Modelo listo', progress: 100 }
-        }))
-      } catch (error) {
-        console.error('Error al inicializar WebLLM:', error)
+        const engine = await initializeGlobalEngine()
+        
         if (isMounted) {
-          setState(prev => ({
-            ...prev,
-            isLoading: false,
-            isReady: false,
-            error: error instanceof Error ? error.message : 'Error desconocido al cargar el modelo',
-            progress: { text: 'Error al cargar', progress: 0 }
-          }))
+          engineRef.current = engine
+          setState(globalState)
+        }
+      } catch (error) {
+        if (isMounted) {
+          setState(globalState)
         }
       }
     }
 
-    initializeEngine()
+    initialize()
 
+    // NO hacer cleanup - mantener el engine en memoria global
+    // Esto evita que se descargue cuando el componente se desmonta
     return () => {
       isMounted = false
-      if (engineRef.current) {
-        try {
-          engineRef.current.unload()
-        } catch (error) {
-          console.error('Error al descargar el motor:', error)
-        }
-      }
+      // No hacer unload aquí - mantener el engine en memoria global
     }
-  }, [initProgressCallback])
+  }, [])
 
   /**
    * Limpia el texto de respuesta del modelo para extraer solo el JSON
@@ -194,7 +274,10 @@ export function useLocalBrain() {
    * Consulta al modelo con una pregunta del usuario
    */
   const askDatabase = useCallback(async (userQuery: string): Promise<DatabaseQuery> => {
-    if (!engineRef.current || !state.isReady) {
+    // Usar el engine global (puede ser el ref o el global directo)
+    const engine = engineRef.current || globalEngine
+    
+    if (!engine || !state.isReady) {
       throw new Error('El modelo no está listo')
     }
 
@@ -207,7 +290,7 @@ export function useLocalBrain() {
       const systemPrompt = SYSTEM_PROMPT.replace('{CURRENT_DATE}', dateStr)
 
       // Generar respuesta del modelo usando la API de WebLLM
-      const response = await engineRef.current.chat.completions.create({
+      const response = await engine.chat.completions.create({
         messages: [
           {
             role: 'system',
@@ -254,6 +337,6 @@ export function useLocalBrain() {
   return {
     ...state,
     askDatabase,
-    engine: engineRef.current
+    engine: engineRef.current || globalEngine
   }
 }

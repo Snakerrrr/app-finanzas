@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { CloudSyncPanel } from "@/components/cloud-sync-panel"
 
 export default function ConfiguracionPage() {
   const [showResetDialog, setShowResetDialog] = useState(false)
@@ -75,6 +76,8 @@ export default function ConfiguracionPage() {
           </div>
         </CardContent>
       </Card>
+
+      <CloudSyncPanel />
 
       <Card className="border-destructive">
         <CardHeader>

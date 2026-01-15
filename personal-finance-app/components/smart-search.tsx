@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
-import { Search, Send, Brain, AlertCircle, Calculator, List, Hash, PieChart as PieChartIcon, BarChart3, DollarSign, Calendar, TrendingUp, Sparkles, X, RotateCcw, CheckCircle2, Undo2 } from 'lucide-react'
+import { Search, Send, Brain, AlertCircle, Calculator, List, Hash, PieChart as PieChartIcon, BarChart3, DollarSign, Calendar, TrendingUp, Sparkles, X, RotateCcw, CheckCircle2, Undo2, Plus, ShoppingCart, Bus, Fuel, Home, Zap, Wifi, Heart, Pill, Tv, UtensilsCrossed, Sparkles as SparklesIcon, Shirt, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -13,19 +13,23 @@ import { useLocalBrain } from '@/hooks/use-local-brain'
 import { executeDatabaseQuery, type QueryResult } from '@/lib/query-executor'
 import type { Transaction } from '@/lib/db'
 import { useData } from '@/lib/data-context'
-import { transactionToMovimiento } from '@/lib/db'
+import { transactionToMovimiento, db } from '@/lib/db'
 import type { Movimiento } from '@/lib/types'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { TransactionReviewCard, type TransactionDraft } from '@/components/transaction-review-card'
+import { useToast } from '@/hooks/use-toast'
 
 export function SmartSearch() {
   const { categorias, addMovimiento, deleteMovimiento } = useData()
   const { isLoading, isReady, progress, error, askDatabase, retryInitialization } = useLocalBrain()
+  const { toast } = useToast()
   const [query, setQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [results, setResults] = useState<Transaction[]>([])
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [transactionDraft, setTransactionDraft] = useState<TransactionDraft | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const performSearch = async (searchQuery?: string) => {
@@ -36,6 +40,7 @@ export function SmartSearch() {
     setResults([])
     setMessage(null)
     setSearchError(null)
+    setTransactionDraft(null) // Limpiar draft anterior
 
     try {
       // Extraer nombres de categorías para el prompt
@@ -44,25 +49,48 @@ export function SmartSearch() {
       // Consultar al modelo LLM (pasar categorías para mapeo dinámico)
       const dbQuery = await askDatabase(queryToUse, categoriaNombres)
       
-      // Ejecutar la consulta en Dexie (pasar categorías para mapeo dinámico)
-      const result = await executeDatabaseQuery(dbQuery, categorias)
-      
-      // Si es una creación, sincronizar con DataContext
-      if (result.operation === 'CREATE' && result.createdTransaction) {
-        const movimiento = transactionToMovimiento(result.createdTransaction)
-        // Crear el movimiento con el mismo ID que se usó en Dexie para mantener consistencia
-        const newMovimiento: Movimiento = {
-          ...movimiento,
-          id: result.createdTransaction.id
+      // Si es una creación, NO ejecutar todavía, sino preparar el draft
+      if (dbQuery.intent === 'create_transaction' && dbQuery.createData) {
+        // Mapear nombre de categoría a ID si tenemos categorías del usuario
+        let categoryId: string = dbQuery.createData.category
+        
+        if (categorias && categorias.length > 0) {
+          const categoryLower = dbQuery.createData.category.toLowerCase()
+          const matchingCategoria = categorias.find(c => 
+            c.nombre.toLowerCase().includes(categoryLower) ||
+            categoryLower.includes(c.nombre.toLowerCase())
+          )
+          if (matchingCategoria) {
+            categoryId = matchingCategoria.id
+          } else {
+            // Si no encuentra coincidencia, usar la primera categoría disponible
+            const defaultCategory = categorias.find(c => 
+              c.nombre.toLowerCase() === 'otros' || 
+              c.nombre.toLowerCase() === 'otro' ||
+              c.nombre.toLowerCase() === 'general'
+            )
+            categoryId = defaultCategory?.id || categorias[0].id
+          }
         }
-        // Usar addMovimiento (generará un nuevo ID, pero luego se sincronizará con Dexie que tiene el ID correcto)
-        // La sincronización bidireccional manejará esto correctamente
-        addMovimiento(movimiento)
+
+        // Crear el draft con los datos de la IA
+        const draft: TransactionDraft = {
+          amount: dbQuery.createData.amount,
+          category: categoryId,
+          description: dbQuery.createData.description,
+          type: dbQuery.createData.type,
+          date: dbQuery.createData.date
+        }
+        
+        setTransactionDraft(draft)
+        setMessage('Revisa y confirma los datos de la transacción antes de guardarla.')
+      } else {
+        // Para otras consultas, ejecutar normalmente
+        const result = await executeDatabaseQuery(dbQuery, categorias)
+        setQueryResult(result)
+        setResults(result.transactions)
+        setMessage(result.message)
       }
-      
-      setQueryResult(result)
-      setResults(result.transactions)
-      setMessage(result.message)
     } catch (error) {
       console.error('Error en la búsqueda:', error)
       setSearchError(error instanceof Error ? error.message : 'Ocurrió un error al procesar tu búsqueda')
@@ -96,10 +124,69 @@ export function SmartSearch() {
     setQueryResult(null)
     setMessage(null)
     setSearchError(null)
+    setTransactionDraft(null)
     if (inputRef.current) {
       inputRef.current.focus()
     }
   }, [])
+
+  // Función para guardar la transacción desde el draft
+  const handleSaveTransaction = async (draft: TransactionDraft) => {
+    try {
+      // Crear la transacción en formato Transaction (para Dexie)
+      const transaction: Transaction = {
+        id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        amount: draft.amount,
+        category: draft.category,
+        date: draft.date,
+        type: draft.type,
+        description: draft.description
+      }
+
+      // Guardar en Dexie
+      await db.transactions.add(transaction)
+      
+      // Convertir a Movimiento y agregar al DataContext
+      const movimiento = transactionToMovimiento(transaction)
+      const newMovimiento: Movimiento = {
+        ...movimiento,
+        id: transaction.id
+      }
+      addMovimiento(movimiento)
+
+      // Mostrar toast de éxito
+      toast({
+        title: '✅ Transacción guardada',
+        description: `${draft.type === 'expense' ? 'Gasto' : 'Ingreso'} de ${formatCurrency(draft.amount)} registrado con éxito.`,
+      })
+
+      // Limpiar el draft y resetear
+      setTransactionDraft(null)
+      setMessage(null)
+      setQuery('')
+      
+      if (inputRef.current) {
+        inputRef.current.focus()
+      }
+    } catch (error) {
+      console.error('Error al guardar transacción:', error)
+      toast({
+        title: 'Error al guardar',
+        description: 'No se pudo guardar la transacción. Intenta nuevamente.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Función para cancelar el draft
+  const handleCancelTransaction = () => {
+    setTransactionDraft(null)
+    setMessage(null)
+    setQuery('')
+    if (inputRef.current) {
+      inputRef.current.focus()
+    }
+  }
 
   // Manejar tecla ESC para limpiar/resetear
   useEffect(() => {
@@ -178,6 +265,49 @@ export function SmartSearch() {
     return date.toLocaleDateString('es-CL', { month: 'short', day: 'numeric' })
   }
 
+  // Mapeo de iconos para categorías
+  const getCategoryIcon = (icono: string) => {
+    const iconMap: Record<string, any> = {
+      'DollarSign': DollarSign,
+      'TrendingUp': TrendingUp,
+      'Home': Home,
+      'ShoppingCart': ShoppingCart,
+      'Bus': Bus,
+      'Fuel': Fuel,
+      'Zap': Zap,
+      'Wifi': Wifi,
+      'Heart': Heart,
+      'Pill': Pill,
+      'Tv': Tv,
+      'UtensilsCrossed': UtensilsCrossed,
+      'GraduationCap': List,
+      'Sparkles': SparklesIcon,
+      'Shirt': Shirt,
+      'Settings': Settings,
+    }
+    return iconMap[icono] || ShoppingCart
+  }
+
+  // Lugares/comercios comunes por categoría
+  const getCommonPlaces = (categoryName: string): string[] => {
+    const placesMap: Record<string, string[]> = {
+      'Supermercado': ['Jumbo', 'Líder', 'Tottus', 'Unimarc', 'Santa Isabel'],
+      'Transporte': ['Uber', 'Taxi', 'Metro', 'Micro', 'Bip'],
+      'Bencina': ['Copec', 'Shell', 'Esso', 'Petrobras', 'Terpel'],
+      'Delivery/Restaurantes': ['Pedidos Ya', 'Uber Eats', 'Rappi', 'Restaurante', 'Café'],
+      'Farmacia': ['Cruz Verde', 'Salcobrand', 'Ahumada', 'Farmacias'],
+      'Servicios Básicos': ['Enel', 'Aguas Andinas', 'Gasco', 'Metrogas'],
+      'Internet/Telefonía': ['VTR', 'Movistar', 'Entel', 'Claro', 'WOM'],
+      'Suscripciones': ['Netflix', 'Spotify', 'Disney+', 'Amazon Prime'],
+      'Entretenimiento': ['Cine', 'Teatro', 'Concierto', 'Evento'],
+      'Salud': ['Isapre', 'Fonasa', 'Clínica', 'Doctor'],
+      'Arriendo/Dividendo': ['Arriendo', 'Dividendo', 'Condominio'],
+      'Sueldo': ['Sueldo', 'Pago'],
+      'Ingresos Extra': ['Freelance', 'Venta', 'Extra'],
+    }
+    return placesMap[categoryName] || [categoryName]
+  }
+
   // Generar sugerencias dinámicas basadas en la fecha actual
   const suggestions = useMemo(() => {
     const now = new Date()
@@ -197,8 +327,58 @@ export function SmartSearch() {
     yesterday.setDate(now.getDate() - 1)
     const yesterdayStr = yesterday.toLocaleDateString('es-CL', { day: 'numeric', month: 'long' })
 
+    // Montos comunes para sugerencias de creación
+    const commonAmounts = [5000, 10000, 15000, 20000, 30000, 50000, 100000, 150000, 200000]
+
+    // Generar sugerencias de creación dinámicas basadas en categorías
+    const createSuggestions: Array<{
+      label: string
+      query: string
+      icon: any
+      intent: 'create_transaction'
+    }> = []
+
+    // Obtener categorías de gastos más comunes
+    const expenseCategories = categorias.filter(cat => 
+      cat.tipo === 'Gasto' || cat.tipo === 'Ambos'
+    ).slice(0, 8) // Limitar a 8 categorías para no saturar
+
+    expenseCategories.forEach((categoria, index) => {
+      const places = getCommonPlaces(categoria.nombre)
+      const place = places[index % places.length] // Rotar entre lugares
+      // Usar índice para seleccionar monto de forma determinística pero variada
+      const amountIndex = index % commonAmounts.length
+      const amount = commonAmounts[amountIndex]
+      
+      // Formato: "Gasté {monto} en {lugar}"
+      createSuggestions.push({
+        label: `${amount.toLocaleString('es-CL')} en ${place}`,
+        query: `Gasté ${amount} en ${place.toLowerCase()}`,
+        icon: getCategoryIcon(categoria.icono),
+        intent: 'create_transaction'
+      })
+    })
+
+    // Agregar algunas sugerencias de ingresos
+    const incomeCategories = categorias.filter(cat => 
+      cat.tipo === 'Ingreso' || cat.tipo === 'Ambos'
+    ).slice(0, 3)
+
+    incomeCategories.forEach((categoria, index) => {
+      // Ingresos suelen ser mayores, usar montos más altos
+      const amountIndex = (index + 3) % commonAmounts.length
+      const amount = commonAmounts[amountIndex] * 5 // Multiplicar por 5 para ingresos
+      createSuggestions.push({
+        label: `Cobré ${amount.toLocaleString('es-CL')} - ${categoria.nombre}`,
+        query: `Cobré ${amount} de ${categoria.nombre.toLowerCase()}`,
+        icon: getCategoryIcon(categoria.icono),
+        intent: 'create_transaction'
+      })
+    })
+
     // Agrupar por intención (aunque visualmente se muestren juntas)
     return {
+      crear: createSuggestions.slice(0, 6), // Limitar a 6 sugerencias de creación
       resumen: [
         {
           label: '💰 Balance Actual',
@@ -278,29 +458,26 @@ export function SmartSearch() {
         }
       ]
     }
-  }, [])
+  }, [categorias])
 
-  // Aplanar todas las sugerencias para mostrar
-  const allSuggestions = useMemo(() => {
-    return [
-      ...suggestions.resumen,
-      ...suggestions.especificas,
-      ...suggestions.analisis
-    ]
-  }, [suggestions])
+  // Mantener las sugerencias organizadas por categorías (no aplanar)
+  // Se usarán directamente las categorías: resumen, especificas, analisis
 
   // Manejar click en sugerencia
   const handleSuggestionClick = (suggestionQuery: string) => {
     setQuery(suggestionQuery)
-    // Auto-submit para rapidez (como prefieres)
-    // Usar setTimeout para permitir que el estado se actualice
+    // Solo llenar el input, NO ejecutar búsqueda automáticamente
+    // El usuario debe hacer clic en el botón de buscar
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus()
+        // Opcional: mover el cursor al final del texto
+        inputRef.current.setSelectionRange(
+          inputRef.current.value.length,
+          inputRef.current.value.length
+        )
       }
-      // Disparar búsqueda automáticamente
-      performSearch(suggestionQuery)
-    }, 50)
+    }, 10)
   }
 
   // Determinar si mostrar sugerencias
@@ -435,37 +612,156 @@ export function SmartSearch() {
 
           {/* Consultas Sugeridas */}
           {shouldShowSuggestions && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Sparkles className="size-4" />
-                <span>Consultas sugeridas:</span>
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Sparkles className="size-4 text-primary" />
+                <span>Consultas sugeridas</span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {allSuggestions.map((suggestion, index) => {
-                  const Icon = suggestion.icon
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleSuggestionClick(suggestion.query)}
-                      disabled={isSearching || !isReady}
-                      className={`
-                        inline-flex items-center gap-2 px-4 py-2 
-                        rounded-full text-sm font-medium
-                        bg-muted/50 hover:bg-muted 
-                        border border-border/50 hover:border-primary/50
-                        transition-all duration-200
-                        cursor-pointer
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        focus:outline-none focus:ring-2 focus:ring-primary/20
-                        active:scale-95
-                      `}
-                    >
-                      <Icon className="size-4 text-primary" />
-                      <span>{suggestion.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
+
+              {/* Sección: Resumen y Totales */}
+              {suggestions.resumen.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Resumen y Totales
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.resumen.map((suggestion, index) => {
+                      const Icon = suggestion.icon
+                      return (
+                        <button
+                          key={`resumen-${index}`}
+                          onClick={() => handleSuggestionClick(suggestion.query)}
+                          disabled={isSearching || !isReady}
+                          className={`
+                            inline-flex items-center gap-2 px-4 py-2.5 
+                            rounded-lg text-sm font-medium
+                            bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-950/40
+                            border border-blue-200 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-800/50
+                            transition-all duration-200
+                            cursor-pointer
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            focus:outline-none focus:ring-2 focus:ring-blue-500/20
+                            active:scale-95
+                            shadow-sm hover:shadow
+                          `}
+                        >
+                          <Icon className="size-4 text-blue-600 dark:text-blue-400" />
+                          <span className="text-blue-900 dark:text-blue-100">{suggestion.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sección: Consultas Específicas */}
+              {suggestions.especificas.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Consultas Específicas
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.especificas.map((suggestion, index) => {
+                      const Icon = suggestion.icon
+                      return (
+                        <button
+                          key={`especificas-${index}`}
+                          onClick={() => handleSuggestionClick(suggestion.query)}
+                          disabled={isSearching || !isReady}
+                          className={`
+                            inline-flex items-center gap-2 px-4 py-2.5 
+                            rounded-lg text-sm font-medium
+                            bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100 dark:hover:bg-emerald-950/40
+                            border border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-300 dark:hover:border-emerald-800/50
+                            transition-all duration-200
+                            cursor-pointer
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            focus:outline-none focus:ring-2 focus:ring-emerald-500/20
+                            active:scale-95
+                            shadow-sm hover:shadow
+                          `}
+                        >
+                          <Icon className="size-4 text-emerald-600 dark:text-emerald-400" />
+                          <span className="text-emerald-900 dark:text-emerald-100">{suggestion.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sección: Análisis y Gráficos */}
+              {suggestions.analisis.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Análisis y Gráficos
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.analisis.map((suggestion, index) => {
+                      const Icon = suggestion.icon
+                      return (
+                        <button
+                          key={`analisis-${index}`}
+                          onClick={() => handleSuggestionClick(suggestion.query)}
+                          disabled={isSearching || !isReady}
+                          className={`
+                            inline-flex items-center gap-2 px-4 py-2.5 
+                            rounded-lg text-sm font-medium
+                            bg-purple-50 dark:bg-purple-950/20 hover:bg-purple-100 dark:hover:bg-purple-950/40
+                            border border-purple-200 dark:border-purple-900/50 hover:border-purple-300 dark:hover:border-purple-800/50
+                            transition-all duration-200
+                            cursor-pointer
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            focus:outline-none focus:ring-2 focus:ring-purple-500/20
+                            active:scale-95
+                            shadow-sm hover:shadow
+                          `}
+                        >
+                          <Icon className="size-4 text-purple-600 dark:text-purple-400" />
+                          <span className="text-purple-900 dark:text-purple-100">{suggestion.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sección: Crear Transacciones (Nueva) */}
+              {suggestions.crear && suggestions.crear.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                    <Plus className="size-3" />
+                    Crear Transacciones
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.crear.map((suggestion, index) => {
+                      const Icon = suggestion.icon
+                      return (
+                        <button
+                          key={`crear-${index}`}
+                          onClick={() => handleSuggestionClick(suggestion.query)}
+                          disabled={isSearching || !isReady}
+                          className={`
+                            inline-flex items-center gap-2 px-4 py-2.5 
+                            rounded-lg text-sm font-medium
+                            bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40
+                            border border-amber-200 dark:border-amber-900/50 hover:border-amber-300 dark:hover:border-amber-800/50
+                            transition-all duration-200
+                            cursor-pointer
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            focus:outline-none focus:ring-2 focus:ring-amber-500/20
+                            active:scale-95
+                            shadow-sm hover:shadow
+                          `}
+                        >
+                          <Icon className="size-4 text-amber-600 dark:text-amber-400" />
+                          <span className="text-amber-900 dark:text-amber-100">{suggestion.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -486,11 +782,30 @@ export function SmartSearch() {
           )}
 
           {/* Mensaje de resultado */}
-          {message && !searchError && queryResult?.operation !== 'CREATE' && (
+          {message && !searchError && !transactionDraft && queryResult?.operation !== 'CREATE' && (
             <div className="p-3 bg-muted/50 rounded-md text-sm">
               {message}
             </div>
           )}
+
+          {/* Mensaje cuando se detecta una transacción a crear */}
+          {transactionDraft && (
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-md text-sm text-blue-900 dark:text-blue-100">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4" />
+                <span>Transacción detectada. Revisa los datos en el modal.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Revisión de Transacción (Staging Area) */}
+          <TransactionReviewCard
+            draft={transactionDraft}
+            categorias={categorias}
+            open={transactionDraft !== null}
+            onSave={handleSaveTransaction}
+            onCancel={handleCancelTransaction}
+          />
 
           {/* Tarjeta de Confirmación (CREATE) */}
           {queryResult && 

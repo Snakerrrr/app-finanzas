@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useData } from "@/lib/data-context"
+import { deleteCategoria, deleteCuenta } from "@/app/actions/finance"
 import { Building2, Wallet, Plus, Pencil, Trash2 } from "lucide-react"
 import { CategoriaDialog } from "@/components/categoria-dialog"
 import { CuentaDialog } from "@/components/cuenta-dialog"
@@ -22,8 +24,9 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function CategoriasPage() {
-  const { categorias, cuentas, deleteCategoria, deleteCuenta } = useData()
+  const { categorias, cuentas, refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
 
   // Estados para Categorías
   const [catDialogOpen, setCatDialogOpen] = useState(false)
@@ -57,16 +60,28 @@ export default function CategoriasPage() {
     setCatDeleteDialogOpen(true)
   }
 
-  const handleDeleteCategoriaConfirm = () => {
-    if (categoriaToDelete) {
-      deleteCategoria(categoriaToDelete)
+  const handleDeleteCategoriaConfirm = async () => {
+    if (!categoriaToDelete) {
+      setCatDeleteDialogOpen(false)
+      return
+    }
+    const result = await deleteCategoria(categoriaToDelete)
+    setCatDeleteDialogOpen(false)
+    setCategoriaToDelete(null)
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Categoría eliminada",
         description: "La categoría se ha eliminado correctamente",
       })
-      setCategoriaToDelete(null)
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-    setCatDeleteDialogOpen(false)
   }
 
   // Handlers para Cuentas
@@ -87,16 +102,28 @@ export default function CategoriasPage() {
     setCtaDeleteDialogOpen(true)
   }
 
-  const handleDeleteCuentaConfirm = () => {
-    if (cuentaToDelete) {
-      deleteCuenta(cuentaToDelete)
+  const handleDeleteCuentaConfirm = async () => {
+    if (!cuentaToDelete) {
+      setCtaDeleteDialogOpen(false)
+      return
+    }
+    const result = await deleteCuenta(cuentaToDelete)
+    setCtaDeleteDialogOpen(false)
+    setCuentaToDelete(null)
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Cuenta eliminada",
         description: "La cuenta se ha eliminado correctamente",
       })
-      setCuentaToDelete(null)
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-    setCtaDeleteDialogOpen(false)
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useData } from "@/lib/data-context"
+import { createPresupuesto } from "@/app/actions/finance"
 import type { Presupuesto } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -26,8 +28,10 @@ interface PresupuestoDialogProps {
 }
 
 export function PresupuestoDialog({ open, onOpenChange, presupuesto, mode }: PresupuestoDialogProps) {
-  const { addPresupuesto, updatePresupuesto, categorias } = useData()
+  const { updatePresupuesto, refreshData, categorias } = useData()
   const { toast } = useToast()
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     categoriaId: "",
@@ -45,10 +49,10 @@ export function PresupuestoDialog({ open, onOpenChange, presupuesto, mode }: Pre
     }
   }, [presupuesto, mode])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.categoriaId || formData.montoPresupuestadoCLP <= 0) {
+    if (!formData.categoriaId || formData.montoPresupuestadoCLP < 0) {
       toast({
         title: "Error",
         description: "Por favor completa todos los campos correctamente",
@@ -58,19 +62,38 @@ export function PresupuestoDialog({ open, onOpenChange, presupuesto, mode }: Pre
     }
 
     if (mode === "create") {
-      addPresupuesto(formData)
-      toast({
-        title: "Presupuesto creado",
-        description: "El presupuesto se ha registrado exitosamente",
+      setIsSubmitting(true)
+      const result = await createPresupuesto({
+        categoriaId: formData.categoriaId,
+        mes: formData.mes,
+        montoPresupuestadoCLP: Number(formData.montoPresupuestadoCLP),
       })
-    } else {
-      updatePresupuesto(presupuesto!.id, formData)
-      toast({
-        title: "Presupuesto actualizado",
-        description: "Los cambios se han guardado correctamente",
-      })
+      setIsSubmitting(false)
+
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Presupuesto creado",
+          description: "El presupuesto se ha guardado en la base de datos",
+        })
+        onOpenChange(false)
+        resetForm()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
+      return
     }
 
+    updatePresupuesto(presupuesto!.id, formData)
+    toast({
+      title: "Presupuesto actualizado",
+      description: "Los cambios se han guardado correctamente",
+    })
     onOpenChange(false)
     resetForm()
   }
@@ -141,10 +164,12 @@ export function PresupuestoDialog({ open, onOpenChange, presupuesto, mode }: Pre
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{mode === "create" ? "Crear Presupuesto" : "Guardar Cambios"}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {mode === "create" ? (isSubmitting ? "Guardando..." : "Crear Presupuesto") : "Guardar Cambios"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

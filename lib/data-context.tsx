@@ -1,15 +1,8 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import {
-  movimientos as initialMovimientos,
-  categorias as initialCategorias,
-  cuentas as initialCuentas,
-  tarjetasCredito as initialTarjetasCredito,
-  metasAhorro as initialMetasAhorro,
-  presupuestos as initialPresupuestos,
-} from "./mock-data"
-import type { Movimiento, Categoria, Cuenta, TarjetaCredito, MetaAhorro, Presupuesto, UserData } from "./types"
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
+import { getDashboardData } from "@/app/actions/finance"
+import type { Movimiento, Categoria, Cuenta, TarjetaCredito, MetaAhorro, Presupuesto } from "./types"
 import { useAuth } from "./auth-context"
 
 interface DataContextType {
@@ -19,6 +12,7 @@ interface DataContextType {
   tarjetasCredito: TarjetaCredito[]
   metasAhorro: MetaAhorro[]
   presupuestos: Presupuesto[]
+  refreshData: () => Promise<void>
   addMovimiento: (mov: Omit<Movimiento, "id">) => void
   updateMovimiento: (id: string, mov: Partial<Movimiento>) => void
   deleteMovimiento: (id: string) => void
@@ -51,27 +45,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [metasAhorro, setMetasAhorro] = useState<MetaAhorro[]>([])
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
 
+  const refreshData = useCallback(async () => {
+    const data = await getDashboardData()
+    if (!data) {
+      setMovimientos([])
+      setCategorias([])
+      setCuentas([])
+      setTarjetasCredito([])
+      setMetasAhorro([])
+      setPresupuestos([])
+      return
+    }
+    setMovimientos(data.movimientos)
+    setCategorias(data.categorias)
+    setCuentas(data.cuentas)
+    setTarjetasCredito(data.tarjetasCredito)
+    setMetasAhorro(data.metasAhorro)
+    setPresupuestos(data.presupuestos)
+  }, [])
+
   useEffect(() => {
     if (user) {
-      const storageKey = `finanzas-cl-data-${user.id}`
-      const savedData = localStorage.getItem(storageKey)
-
-      if (savedData) {
-        const userData: UserData = JSON.parse(savedData)
-        setMovimientos(userData.movimientos)
-        setCategorias(userData.categorias)
-        setCuentas(userData.cuentas)
-        setTarjetasCredito(userData.tarjetasCredito)
-        setMetasAhorro(userData.metasAhorro)
-        setPresupuestos(userData.presupuestos)
-      } else {
-        setMovimientos(initialMovimientos)
-        setCategorias(initialCategorias)
-        setCuentas(initialCuentas)
-        setTarjetasCredito(initialTarjetasCredito)
-        setMetasAhorro(initialMetasAhorro)
-        setPresupuestos(initialPresupuestos)
-      }
+      refreshData()
     } else {
       setMovimientos([])
       setCategorias([])
@@ -80,22 +75,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMetasAhorro([])
       setPresupuestos([])
     }
-  }, [user])
-
-  useEffect(() => {
-    if (user) {
-      const storageKey = `finanzas-cl-data-${user.id}`
-      const userData: UserData = {
-        movimientos,
-        categorias,
-        cuentas,
-        tarjetasCredito,
-        metasAhorro,
-        presupuestos,
-      }
-      localStorage.setItem(storageKey, JSON.stringify(userData))
-    }
-  }, [user, movimientos, categorias, cuentas, tarjetasCredito, metasAhorro, presupuestos])
+  }, [user, refreshData])
 
   const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
@@ -222,6 +202,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     tarjetasCredito,
     metasAhorro,
     presupuestos,
+    refreshData,
     addMovimiento,
     updateMovimiento,
     deleteMovimiento,

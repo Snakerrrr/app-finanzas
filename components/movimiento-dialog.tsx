@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { useData } from "@/lib/data-context"
+import { createMovimiento, updateMovimiento as updateMovimientoAction } from "@/app/actions/finance"
 import type { Movimiento, TipoMovimiento, MetodoPago, TipoGasto } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -28,8 +30,10 @@ interface MovimientoDialogProps {
 }
 
 export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: MovimientoDialogProps) {
-  const { addMovimiento, updateMovimiento, categorias, cuentas, tarjetasCredito } = useData()
+  const { refreshData, categorias, cuentas, tarjetasCredito } = useData()
   const { toast } = useToast()
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split("T")[0],
@@ -71,7 +75,7 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
     }
   }, [movimiento, mode])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.descripcion || !formData.categoriaId || formData.montoCLP <= 0) {
@@ -92,25 +96,67 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
       tarjetaCreditoId: formData.tarjetaCreditoId || undefined,
       cuotas: formData.cuotas > 1 ? formData.cuotas : undefined,
       notas: formData.notas || undefined,
-      etiquetas: undefined,
     }
 
     if (mode === "create") {
-      addMovimiento(movimientoData)
-      toast({
-        title: "Movimiento creado",
-        description: "El movimiento se ha registrado exitosamente",
-      })
-    } else {
-      updateMovimiento(movimiento!.id, movimientoData)
+      setIsSubmitting(true)
+      const result = await createMovimiento(movimientoData)
+      setIsSubmitting(false)
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Movimiento creado",
+          description: "El movimiento se ha registrado exitosamente",
+        })
+        onOpenChange(false)
+        resetForm()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await updateMovimientoAction(movimiento!.id, {
+      fecha: movimientoData.fecha,
+      descripcion: movimientoData.descripcion,
+      tipoMovimiento: movimientoData.tipoMovimiento,
+      categoriaId: movimientoData.categoriaId,
+      subcategoria: movimientoData.subcategoria || null,
+      tipoGasto: movimientoData.tipoGasto || null,
+      metodoPago: movimientoData.metodoPago,
+      montoCLP: movimientoData.montoCLP,
+      cuotas: movimientoData.cuotas || null,
+      notas: movimientoData.notas || null,
+      estadoConciliacion: formData.estadoConciliacion,
+      mesConciliacion: movimientoData.mesConciliacion,
+      cuentaOrigenId: movimientoData.cuentaOrigenId || null,
+      cuentaDestinoId: movimientoData.cuentaDestinoId || null,
+      tarjetaCreditoId: movimientoData.tarjetaCreditoId || null,
+    })
+    setIsSubmitting(false)
+
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Movimiento actualizado",
         description: "Los cambios se han guardado correctamente",
       })
+      onOpenChange(false)
+      resetForm()
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-
-    onOpenChange(false)
-    resetForm()
   }
 
   const resetForm = () => {
@@ -354,10 +400,12 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{mode === "create" ? "Crear Movimiento" : "Guardar Cambios"}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {mode === "create" ? (isSubmitting ? "Guardando..." : "Crear Movimiento") : "Guardar Cambios"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

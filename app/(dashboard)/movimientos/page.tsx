@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useData } from "@/lib/data-context"
+import { deleteMovimiento } from "@/app/actions/finance"
 import { formatCLP, formatDate } from "@/lib/utils-finance"
 import { Plus, Search, Pencil, Trash2 } from "lucide-react"
 import { MovimientoDialog } from "@/components/movimiento-dialog"
@@ -23,8 +25,9 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function MovimientosPage() {
-  const { movimientos, categorias, deleteMovimiento } = useData()
+  const { movimientos, categorias, refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -62,16 +65,28 @@ export default function MovimientosPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleDeleteConfirm = () => {
-    if (movimientoToDelete) {
-      deleteMovimiento(movimientoToDelete)
+  const handleDeleteConfirm = async () => {
+    if (!movimientoToDelete) {
+      setDeleteDialogOpen(false)
+      return
+    }
+    const result = await deleteMovimiento(movimientoToDelete)
+    setDeleteDialogOpen(false)
+    setMovimientoToDelete(null)
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Movimiento eliminado",
         description: "El movimiento se ha eliminado correctamente",
       })
-      setMovimientoToDelete(null)
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-    setDeleteDialogOpen(false)
   }
 
   return (

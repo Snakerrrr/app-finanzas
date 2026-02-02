@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useData } from "@/lib/data-context"
+import { createCategoria, updateCategoria as updateCategoriaAction } from "@/app/actions/finance"
 import type { Categoria, TipoCategoria } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -26,8 +28,10 @@ interface CategoriaDialogProps {
 }
 
 export function CategoriaDialog({ open, onOpenChange, categoria, mode }: CategoriaDialogProps) {
-  const { addCategoria, updateCategoria } = useData()
+  const { refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     nombre: "",
@@ -47,10 +51,10 @@ export function CategoriaDialog({ open, onOpenChange, categoria, mode }: Categor
     }
   }, [categoria, mode])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.nombre) {
+    if (!formData.nombre.trim()) {
       toast({
         title: "Error",
         description: "El nombre de la categoría es requerido",
@@ -60,21 +64,59 @@ export function CategoriaDialog({ open, onOpenChange, categoria, mode }: Categor
     }
 
     if (mode === "create") {
-      addCategoria(formData)
-      toast({
-        title: "Categoría creada",
-        description: "La categoría se ha registrado exitosamente",
+      setIsSubmitting(true)
+      const result = await createCategoria({
+        nombre: formData.nombre.trim(),
+        tipo: formData.tipo,
+        color: formData.color,
+        icono: formData.icono || "Tag",
       })
-    } else {
-      updateCategoria(categoria!.id, formData)
+      setIsSubmitting(false)
+
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Categoría creada",
+          description: "La categoría se ha guardado en la base de datos",
+        })
+        onOpenChange(false)
+        resetForm()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await updateCategoriaAction(categoria!.id, {
+      nombre: formData.nombre.trim(),
+      tipo: formData.tipo,
+      color: formData.color,
+      icono: formData.icono || "Tag",
+    })
+    setIsSubmitting(false)
+
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Categoría actualizada",
         description: "Los cambios se han guardado correctamente",
       })
+      onOpenChange(false)
+      resetForm()
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-
-    onOpenChange(false)
-    resetForm()
   }
 
   const resetForm = () => {
@@ -156,10 +198,12 @@ export function CategoriaDialog({ open, onOpenChange, categoria, mode }: Categor
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{mode === "create" ? "Crear Categoría" : "Guardar Cambios"}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {mode === "create" ? (isSubmitting ? "Guardando..." : "Crear Categoría") : "Guardar Cambios"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

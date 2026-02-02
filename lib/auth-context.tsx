@@ -1,105 +1,61 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, type ReactNode } from "react"
+import { useSession, signIn, signOut } from "next-auth/react"
 import type { User } from "./types"
-import { initialCategorias, initialCuentas } from "./initial-data"
+
+/**
+ * Contexto de autenticación que expone la sesión de NextAuth con la misma API que antes.
+ * Ya no usa localStorage: la sesión persiste en Supabase (tablas User, Account, Session) vía PrismaAdapter.
+ */
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<boolean>
+  login: (provider?: "google") => Promise<void>
   register: (email: string, password: string, name: string) => Promise<boolean>
-  logout: () => void
+  logout: () => Promise<void>
   isLoading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+function sessionUserToAppUser(sessionUser: { id: string; name?: string | null; email?: string | null }): User {
+  return {
+    id: sessionUser.id,
+    name: sessionUser.name ?? "",
+    email: sessionUser.email ?? "",
+    createdAt: new Date().toISOString(),
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const { data: session, status } = useSession()
+  const isLoading = status === "loading"
+  const user = session?.user ? sessionUserToAppUser(session.user) : null
 
-  // Load user from localStorage on mount
-  useEffect(() => {
-    const savedUser = localStorage.getItem("finanzas-cl-user")
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
-    }
-    setIsLoading(false)
-  }, [])
-
-  const register = async (email: string, password: string, name: string): Promise<boolean> => {
-    try {
-      // Get existing users
-      const usersData = localStorage.getItem("finanzas-cl-users")
-      const users: Record<string, { password: string; user: User }> = usersData ? JSON.parse(usersData) : {}
-
-      // Check if user already exists
-      if (users[email]) {
-        return false
-      }
-
-      // Create new user
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        email,
-        name,
-        createdAt: new Date().toISOString(),
-      }
-
-      // Save user credentials
-      users[email] = { password, user: newUser }
-      localStorage.setItem("finanzas-cl-users", JSON.stringify(users))
-
-      localStorage.setItem(
-        `finanzas-cl-data-${newUser.id}`,
-        JSON.stringify({
-          movimientos: [],
-          categorias: initialCategorias,
-          cuentas: initialCuentas,
-          tarjetasCredito: [],
-          metasAhorro: [],
-          presupuestos: [],
-        }),
-      )
-
-      // Set current user
-      setUser(newUser)
-      localStorage.setItem("finanzas-cl-user", JSON.stringify(newUser))
-
-      return true
-    } catch (error) {
-      console.error("[v0] Error registering user:", error)
-      return false
-    }
+  const login = async (provider: "google" = "google") => {
+    await signIn(provider, { callbackUrl: "/" })
   }
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    try {
-      const usersData = localStorage.getItem("finanzas-cl-users")
-      if (!usersData) return false
-
-      const users: Record<string, { password: string; user: User }> = JSON.parse(usersData)
-      const userData = users[email]
-
-      if (!userData || userData.password !== password) {
-        return false
-      }
-
-      setUser(userData.user)
-      localStorage.setItem("finanzas-cl-user", JSON.stringify(userData.user))
-      return true
-    } catch (error) {
-      console.error("[v0] Error logging in:", error)
-      return false
-    }
+  const logout = async () => {
+    await signOut({ callbackUrl: "/login" })
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem("finanzas-cl-user")
+  const register = async (_email: string, _password: string, _name: string): Promise<boolean> => {
+    // Con autenticación solo Google, el registro es "entrar con Google" (primera vez crea el usuario en BD).
+    await signIn("google", { callbackUrl: "/" })
+    return true
   }
 
-  return <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>{children}</AuthContext.Provider>
+  const value: AuthContextType = {
+    user,
+    login,
+    register,
+    logout,
+    isLoading,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

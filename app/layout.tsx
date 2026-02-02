@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { SessionProvider } from "next-auth/react"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
@@ -46,10 +47,12 @@ export default function RootLayout({
     <html lang="es-CL" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider defaultTheme="system" storageKey="finanzas-cl-theme">
-          <AuthProvider>
-            {children}
-            <Toaster />
-          </AuthProvider>
+          <SessionProvider>
+            <AuthProvider>
+              {children}
+              <Toaster />
+            </AuthProvider>
+          </SessionProvider>
           <Analytics />
         </ThemeProvider>
       </body>

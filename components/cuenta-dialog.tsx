@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useData } from "@/lib/data-context"
+import { createCuenta, updateCuenta as updateCuentaAction } from "@/app/actions/finance"
 import type { Cuenta } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { Switch } from "@/components/ui/switch"
@@ -26,8 +28,10 @@ interface CuentaDialogProps {
 }
 
 export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogProps) {
-  const { addCuenta, updateCuenta } = useData()
+  const { refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     nombre: "",
@@ -49,10 +53,10 @@ export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogP
     }
   }, [cuenta, mode])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.nombre || !formData.banco) {
+    if (!formData.nombre.trim() || !formData.banco.trim()) {
       toast({
         title: "Error",
         description: "Por favor completa todos los campos requeridos",
@@ -62,21 +66,59 @@ export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogP
     }
 
     if (mode === "create") {
-      addCuenta(formData)
-      toast({
-        title: "Cuenta creada",
-        description: "La cuenta se ha registrado exitosamente",
+      setIsSubmitting(true)
+      const result = await createCuenta({
+        nombre: formData.nombre.trim(),
+        banco: formData.banco.trim(),
+        saldoInicialMes: Number(formData.saldoInicialMes) || 0,
       })
-    } else {
-      updateCuenta(cuenta!.id, formData)
+      setIsSubmitting(false)
+
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Cuenta creada",
+          description: "La cuenta se ha guardado en la base de datos",
+        })
+        onOpenChange(false)
+        resetForm()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await updateCuentaAction(cuenta!.id, {
+      nombre: formData.nombre.trim(),
+      banco: formData.banco.trim(),
+      saldoInicialMes: Number(formData.saldoInicialMes) || 0,
+      saldoFinalMesDeclarado: formData.saldoFinalMesDeclarado ?? null,
+      activo: formData.activo,
+    })
+    setIsSubmitting(false)
+
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Cuenta actualizada",
         description: "Los cambios se han guardado correctamente",
       })
+      onOpenChange(false)
+      resetForm()
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-
-    onOpenChange(false)
-    resetForm()
   }
 
   const resetForm = () => {
@@ -158,10 +200,12 @@ export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogP
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{mode === "create" ? "Crear Cuenta" : "Guardar Cambios"}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {mode === "create" ? (isSubmitting ? "Guardando..." : "Crear Cuenta") : "Guardar Cambios"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

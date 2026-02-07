@@ -6,6 +6,7 @@ import { SessionProvider } from "next-auth/react"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
+import { AiAssistant } from "@/components/ai-assistant"
 import { Toaster } from "@/components/ui/toaster"
 
 const inter = Inter({
@@ -51,6 +52,7 @@ export default function RootLayout({
             <AuthProvider>
               {children}
               <Toaster />
+              <AiAssistant />
             </AuthProvider>
           </SessionProvider>
           <Analytics />

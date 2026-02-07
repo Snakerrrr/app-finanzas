@@ -388,6 +388,45 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   }
 }
 
+/** Filtros opcionales para buscar movimientos */
+export type GetMovimientosFilters = {
+  startDate?: string // YYYY-MM-DD
+  endDate?: string   // YYYY-MM-DD
+  categoryId?: string
+}
+
+/**
+ * Obtiene movimientos del usuario con filtros opcionales por rango de fechas y categoría.
+ * Usado por el chatbot y la API para búsquedas.
+ */
+export async function getMovimientos(
+  userId: string,
+  filters?: GetMovimientosFilters
+): Promise<MovimientoForClient[]> {
+  await ensureDefaultCategories(userId)
+  const where: { userId: string; fecha?: { gte?: Date; lte?: Date }; categoriaId?: string } = {
+    userId,
+  }
+  if (filters?.startDate) {
+    where.fecha = { ...where.fecha, gte: new Date(filters.startDate + "T00:00:00Z") }
+  }
+  if (filters?.endDate) {
+    where.fecha = {
+      ...where.fecha,
+      lte: new Date(filters.endDate + "T23:59:59.999Z"),
+    }
+  }
+  if (filters?.categoryId) {
+    where.categoriaId = filters.categoryId
+  }
+  const raw = await prisma.movimiento.findMany({
+    where,
+    include: { categoria: true, cuentaOrigen: true, cuentaDestino: true },
+    orderBy: { fecha: "desc" },
+  })
+  return raw.map(toMovimientoForClient)
+}
+
 // ---------------------------------------------------------------------------
 // Movimientos
 // ---------------------------------------------------------------------------

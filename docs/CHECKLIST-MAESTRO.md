@@ -747,14 +747,40 @@ graph TD
 
 ---
 
-**🎯 Siguiente tarea recomendada:** Type Safety & Type Guards (3.1) - 3 horas (FASE 3: MEJORAS FUTURAS)
+**🎯 Siguiente tarea recomendada:** Comenzar implementación PLAN-MEJORAS-WEB.md (Dashboard mejorado)
 
-**⏱️ Tiempo total estimado restante:** ~25 horas (~1 semana full-time)
-
----
-
-**🎉 ¡67% DEL ROADMAP COMPLETADO!** FASE 1 y FASE 2 completas al 100%. Solo queda FASE 3 (Mejoras Futuras).
+**⏱️ Tiempo total estimado restante:** ~25 horas (FASE 3 Enterprise) + ~87 horas (Mejoras Web)
 
 ---
 
-*Checklist actualizado automáticamente. Última modificación: 14 Feb 2026, 04:30 CLT*
+**🎉 ¡67% DEL ROADMAP ENTERPRISE COMPLETADO!** FASE 1 y FASE 2 completas al 100%. Solo queda FASE 3 (Mejoras Futuras).
+
+---
+
+## 🚀 NUEVO: Plan de Mejoras Web
+
+**Fecha de inicio:** 14 de Febrero, 2026  
+**Origen:** Mejoras validadas en app móvil iOS  
+**Objetivo:** Replicar features exitosas en web
+
+### Estado de Migraciones
+
+- ✅ **Migraciones BD:** Aplicadas exitosamente (6 nuevos modelos, 2 extensiones)
+- ✅ **Cliente Prisma:** Generado correctamente
+- ✅ **Tips financieros:** 30 consejos insertados en BD
+- ⏳ **Implementación:** Ver `docs/PLAN-MEJORAS-WEB.md`
+
+### Resumen del Plan
+
+| Fase | Features | Tiempo | Estado |
+|------|----------|--------|--------|
+| **FASE 1: Fundaciones** | 6 | 16h | ⏳ Pendiente |
+| **FASE 2: Experiencia** | 8 | 33h | ⏳ Pendiente |
+| **FASE 3: Engagement** | 9 | 38h | ⏳ Pendiente |
+| **TOTAL** | **23** | **87h** | **0% completado** |
+
+Ver documentación completa: `docs/PLAN-MEJORAS-WEB.md`
+
+---
+
+*Checklist actualizado automáticamente. Última modificación: 14 Feb 2026, 05:30 CLT*

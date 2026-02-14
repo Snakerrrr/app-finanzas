@@ -25,14 +25,27 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts       Account[]
-  sessions       Session[]
-  categorias     Categoria[]
-  cuentas        Cuenta[]
-  tarjetasCredito TarjetaCredito[]
-  metasAhorro    MetaAhorro[]
-  presupuestos   Presupuesto[]
-  movimientos    Movimiento[]
+  // Gamificación
+  currentStreak      Int      @default(0)     // Racha actual de días con transacciones
+  longestStreak      Int      @default(0)     // Racha más larga histórica
+  lastActivityDate   DateTime? @db.Date       // Última fecha con transacción (para calcular streak)
+  totalAhorrado      Float    @default(0)     // Total ahorrado histórico
+  nivelGamificacion  String   @default("Bronce") // "Bronce" | "Plata" | "Oro" | "Platino"
+  onboardingCompleted Boolean @default(false) // Si completó el onboarding
+
+  accounts          Account[]
+  sessions          Session[]
+  categorias        Categoria[]
+  cuentas           Cuenta[]
+  tarjetasCredito   TarjetaCredito[]
+  metasAhorro       MetaAhorro[]
+  presupuestos      Presupuesto[]
+  movimientos       Movimiento[]
+  recurringTransactions RecurringTransaction[]
+  achievements      Achievement[]
+  alerts            SmartAlert[]
+  ownedGroups       FamilyGroup[] @relation("GroupOwner")
+  groupMemberships  FamilyGroupMember[]
 }
 
 model Account {
@@ -188,18 +201,131 @@ model Movimiento {
   cuentaOrigenId       String?
   cuentaDestinoId      String?
   tarjetaCreditoId     String?
+  recurrenteId         String?  // FK a RecurringTransaction (si fue creado automáticamente)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoria      Categoria     @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
-  cuentaOrigen   Cuenta?       @relation("CuentaOrigen", fields: [cuentaOrigenId], references: [id], onDelete: SetNull)
-  cuentaDestino  Cuenta?       @relation("CuentaDestino", fields: [cuentaDestinoId], references: [id], onDelete: SetNull)
-  tarjetaCredito TarjetaCredito? @relation(fields: [tarjetaCreditoId], references: [id], onDelete: SetNull)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoria      Categoria             @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+  cuentaOrigen   Cuenta?               @relation("CuentaOrigen", fields: [cuentaOrigenId], references: [id], onDelete: SetNull)
+  cuentaDestino  Cuenta?               @relation("CuentaDestino", fields: [cuentaDestinoId], references: [id], onDelete: SetNull)
+  tarjetaCredito TarjetaCredito?       @relation(fields: [tarjetaCreditoId], references: [id], onDelete: SetNull)
+  recurrente     RecurringTransaction? @relation(fields: [recurrenteId], references: [id], onDelete: SetNull)
 
   // Índices optimizados para queries frecuentes
   @@index([userId, fecha(sort: Desc)], name: "idx_user_fecha_desc")
   @@index([userId, categoriaId, fecha(sort: Desc)], name: "idx_user_cat_fecha")
   @@index([userId, mesConciliacion], name: "idx_user_mes")
   @@index([userId, tipoMovimiento, fecha(sort: Desc)], name: "idx_user_tipo_fecha")
+}
+
+// =============================================================================
+// Mejoras Web - Nuevas funcionalidades
+// =============================================================================
+
+// Gastos Recurrentes Automáticos
+model RecurringTransaction {
+  id              String   @id @default(cuid())
+  descripcion     String
+  montoCLP        Float
+  frecuencia      String   // "mensual" | "quincenal" | "semanal"
+  diaMes          Int?     // Día del mes (1-31) para frecuencia mensual
+  categoriaId     String
+  cuentaOrigenId  String?
+  activo          Boolean  @default(true)
+  autoCrear       Boolean  @default(false) // Si se debe crear automáticamente
+  proximaFecha    DateTime @db.Date
+  userId          String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movimientos    Movimiento[] // Transacciones creadas automáticamente
+
+  @@index([userId, proximaFecha])
+  @@index([userId, activo])
+}
+
+// Sistema de Gamificación - Logros
+model Achievement {
+  id              String   @id @default(cuid())
+  tipo            String   // "FIRST_TRANSACTION" | "STREAK_7" | "STREAK_30" | "BUDGET_MET" | "GOAL_REACHED" | "LEVEL_SILVER" | "LEVEL_GOLD"
+  titulo          String
+  descripcion     String
+  icono           String   // Emoji o nombre de icono
+  desbloqueadoEn  DateTime @default(now())
+  visto           Boolean  @default(false)
+  userId          String
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, desbloqueadoEn(sort: Desc)])
+  @@index([userId, visto])
+}
+
+// Consejos Financieros
+model FinancialTip {
+  id          String   @id @default(cuid())
+  categoria   String   // "Presupuesto" | "Ahorro" | "Deuda" | "Hábitos" | "Inversión"
+  titulo      String
+  contenido   String   @db.Text
+  prioridad   Int      @default(5) // 1-10, más alto = más importante
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([activo, prioridad(sort: Desc)])
+}
+
+// Alertas Inteligentes
+model SmartAlert {
+  id          String   @id @default(cuid())
+  tipo        String   // "BUDGET_EXCEEDED" | "BUDGET_WARNING" | "HIGH_DEBT" | "RECONCILE_REMINDER" | "GOAL_ACHIEVED" | "PATTERN_DETECTED"
+  titulo      String
+  mensaje     String   @db.Text
+  prioridad   String   @default("media") // "baja" | "media" | "alta"
+  accion      String?  // Acción sugerida (texto del botón CTA)
+  accionUrl   String?  // URL a la que redirige el CTA
+  visto       Boolean  @default(false)
+  descartado  Boolean  @default(false)
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, visto, descartado])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// Grupos Familiares
+model FamilyGroup {
+  id               String   @id @default(cuid())
+  nombre           String
+  codigoInvitacion String   @unique @default(cuid()) // Código de 6 dígitos para unirse
+  propietarioId    String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  propietario User                @relation("GroupOwner", fields: [propietarioId], references: [id], onDelete: Cascade)
+  miembros    FamilyGroupMember[]
+
+  @@index([propietarioId])
+}
+
+// Miembros de Grupos Familiares
+model FamilyGroupMember {
+  id        String   @id @default(cuid())
+  grupoId   String
+  userId    String
+  rol       String   @default("member") // "owner" | "member"
+  unidoEn   DateTime @default(now())
+
+  grupo FamilyGroup @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([grupoId, userId]) // Un usuario solo puede estar una vez en un grupo
+  @@index([userId])
+  @@index([grupoId])
 }

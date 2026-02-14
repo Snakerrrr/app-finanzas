@@ -7,25 +7,49 @@ import { z } from "zod"
 
 export const maxDuration = 60
 
-/** Extrae el texto del último mensaje del usuario (soporta content string o array de partes) */
+/**
+ * Extrae el texto del último mensaje del usuario.
+ *
+ * AI SDK v6 (UIMessage): los mensajes llegan con `parts` (array de { type, text })
+ * Versiones anteriores: los mensajes podían tener `content` (string o array)
+ *
+ * Esta función soporta ambos formatos para robustez.
+ */
 function getLastUserMessageContent(messages: unknown): string {
   if (!Array.isArray(messages) || messages.length === 0) return ""
-  const last = messages[messages.length - 1]
-  if (!last || (last as { role?: string }).role !== "user") {
-    const userMsg = [...messages].reverse().find((m) => (m as { role?: string }).role === "user")
-    if (!userMsg) return ""
-    return extractContent((userMsg as { content?: unknown }).content)
-  }
-  return extractContent((last as { content?: unknown }).content)
+
+  // Buscar el último mensaje con role "user"
+  const userMsg = [...messages]
+    .reverse()
+    .find((m) => (m as { role?: string }).role === "user")
+
+  if (!userMsg) return ""
+  return extractContent(userMsg)
 }
 
-function extractContent(content: unknown): string {
-  if (typeof content === "string") return content
-  if (Array.isArray(content)) {
-    return content
-      .map((p) => (p && typeof p === "object" && "text" in p ? String((p as { text: string }).text) : ""))
+function extractContent(message: unknown): string {
+  if (!message || typeof message !== "object") return ""
+  const msg = message as Record<string, unknown>
+
+  // Formato AI SDK v6 (UIMessage): { parts: [{ type: "text", text: "..." }] }
+  if (Array.isArray(msg.parts)) {
+    const text = msg.parts
+      .filter((p: unknown) => p && typeof p === "object" && (p as { type?: string }).type === "text")
+      .map((p: unknown) => String((p as { text: string }).text || ""))
+      .join(" ")
+    if (text.trim()) return text
+  }
+
+  // Formato legacy: { content: "string" }
+  if (typeof msg.content === "string") return msg.content
+
+  // Formato legacy: { content: [{ type: "text", text: "..." }] }
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .map((p: unknown) => (p && typeof p === "object" && "text" in (p as object) ? String((p as { text: string }).text) : ""))
       .join(" ")
   }
+
   return ""
 }
 
@@ -54,14 +78,15 @@ export async function POST(req: Request) {
     const lastUserMessage = getLastUserMessageContent(messages).trim() || "Hola"
 
     console.log("------------------------------------------------")
-    console.log(`📨 Nuevo Mensaje Usuario: "${lastUserMessage}"`)
+    console.log(`📨 Mensaje recibido (${messages.length} mensajes en historial)`)
+    console.log(`📨 Último mensaje usuario: "${lastUserMessage}"`)
 
     // ---------------------------------------------------------
     // PASO 1: ROUTER (Clasificación de Intención)
     // Schema estricto: .nullable() para OpenAI Structured Outputs (no .optional())
     // ---------------------------------------------------------
     const { object: intention } = await generateObject({
-      model: openai("gpt-4o-mini", { structuredOutputs: true }),
+      model: openai("gpt-4o-mini"),
       schema: z.object({
         intent: z
           .enum(["BALANCE", "MOVIMIENTOS", "SALUDO", "AYUDA", "OTRO"])

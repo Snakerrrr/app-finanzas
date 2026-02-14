@@ -20,9 +20,20 @@ const redis = Redis.fromEnv()
 export async function getCached<T>(key: string): Promise<T | null> {
   try {
     const data = await redis.get<T>(key)
-    return data ?? null
+    if (data) {
+      // Cache HIT - log en desarrollo
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[cache] ✅ HIT: ${key}`)
+      }
+      return data
+    }
+    // Cache MISS
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[cache] ⚠️ MISS: ${key}`)
+    }
+    return null
   } catch (error) {
-    console.warn("[cache] Error al leer:", key, error)
+    console.warn("[cache] ❌ Error al leer:", key, error)
     return null
   }
 }
@@ -33,8 +44,11 @@ export async function getCached<T>(key: string): Promise<T | null> {
 export async function setCached<T>(key: string, value: T, ttlSeconds = 30): Promise<void> {
   try {
     await redis.set(key, JSON.stringify(value), { ex: ttlSeconds })
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[cache] 💾 SET: ${key} (TTL: ${ttlSeconds}s)`)
+    }
   } catch (error) {
-    console.warn("[cache] Error al escribir:", key, error)
+    console.warn("[cache] ❌ Error al escribir:", key, error)
   }
 }
 
@@ -71,9 +85,12 @@ export async function invalidateUserCache(userId: string): Promise<void> {
 
     if (keys.length > 0) {
       await redis.del(...keys)
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[cache] 🗑️ INVALIDATE: ${keys.length} claves de usuario ${userId}`)
+      }
     }
   } catch (error) {
-    console.warn("[cache] Error al invalidar cache de usuario:", userId, error)
+    console.warn("[cache] ❌ Error al invalidar cache de usuario:", userId, error)
   }
 }
 

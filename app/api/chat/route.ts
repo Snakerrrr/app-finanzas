@@ -5,6 +5,7 @@ import { openai } from "@ai-sdk/openai"
 import { convertToModelMessages, generateObject, streamText } from "ai"
 import { z } from "zod"
 import { chatRateLimit, ipRateLimit } from "@/lib/rate-limit"
+import { logger, logChatEvent } from "@/lib/logger"
 
 export const maxDuration = 60
 
@@ -105,9 +106,12 @@ export async function POST(req: Request) {
     const messages = Array.isArray(body?.messages) ? body.messages : []
     const lastUserMessage = getLastUserMessageContent(messages).trim() || "Hola"
 
-    console.log("------------------------------------------------")
-    console.log(`📨 Mensaje recibido (${messages.length} mensajes en historial)`)
-    console.log(`📨 Último mensaje usuario: "${lastUserMessage}"`)
+    logChatEvent("request", {
+      userId,
+      messageCount: messages.length,
+      lastMessage: lastUserMessage.slice(0, 100),
+      ip,
+    })
 
     // ---------------------------------------------------------
     // PASO 1: ROUTER (Clasificación de Intención)
@@ -137,8 +141,11 @@ Guía:
 - Cualquier otra cosa -> OTRO`,
     })
 
-    console.log(`🧭 Intención Detectada: [${intention.intent}]`)
-    console.log(`🔍 Parámetros extraídos:`, intention.parameters)
+    logChatEvent("router", {
+      userId,
+      intent: intention.intent,
+      parameters: intention.parameters,
+    })
 
     // ---------------------------------------------------------
     // PASO 2: EJECUTOR (Lógica de Negocio)
@@ -147,7 +154,6 @@ Guía:
 
     switch (intention.intent) {
       case "BALANCE":
-        console.log("⚡ Ejecutando: getDashboardData...")
         try {
           const balanceData = await getDashboardData(userId)
           const ingresosMes = balanceData.movimientosMes
@@ -162,16 +168,25 @@ Guía:
             gastosDelMes: gastosMes,
             cantidadMovimientosMes: balanceData.movimientosMes.length,
           }
-          console.log("✅ Datos obtenidos (Balance):", resumen ? "OK" : "Vacío")
+          logChatEvent("executor", {
+            userId,
+            intent: "BALANCE",
+            success: true,
+            dataSize: JSON.stringify(resumen).length,
+          })
           systemContext = `DATOS DE BALANCE ACTUAL: ${JSON.stringify(resumen, null, 2)}`
         } catch (error) {
-          console.error("❌ Error obteniendo balance:", error)
+          logger.error({ userId, error, intent: "BALANCE" }, "Error en executor")
+          logChatEvent("error", {
+            userId,
+            intent: "BALANCE",
+            error: error instanceof Error ? error.message : String(error),
+          })
           systemContext = "Hubo un error técnico al consultar el balance."
         }
         break
 
       case "MOVIMIENTOS":
-        console.log("⚡ Ejecutando: getMovimientos...")
         try {
           const filters = {
             startDate: intention.parameters.startDate ?? undefined,
@@ -195,24 +210,45 @@ Guía:
             monto: m.montoCLP,
             categoria: m.categoria?.nombre,
           }))
-          console.log(`✅ Movimientos encontrados: ${preview.length}`)
+
+          logChatEvent("executor", {
+            userId,
+            intent: "MOVIMIENTOS",
+            success: true,
+            total: resultados.length,
+            shown: preview.length,
+            filters,
+          })
 
           systemContext = `LISTADO DE MOVIMIENTOS (${preview.length} mostrados):
 ${JSON.stringify(preview, null, 2)}`
         } catch (error) {
-          console.error("❌ Error obteniendo movimientos:", error)
+          logger.error({ userId, error, intent: "MOVIMIENTOS" }, "Error en executor")
+          logChatEvent("error", {
+            userId,
+            intent: "MOVIMIENTOS",
+            error: error instanceof Error ? error.message : String(error),
+          })
           systemContext = "Hubo un error técnico al consultar los movimientos."
         }
         break
 
       default:
-        console.log("ℹ️ No se requiere consulta a base de datos.")
+        logChatEvent("executor", {
+          userId,
+          intent: intention.intent,
+          success: true,
+          note: "No requiere consulta a BD",
+        })
     }
 
     // ---------------------------------------------------------
     // PASO 3: GENERADOR (Respuesta Final)
     // ---------------------------------------------------------
-    console.log("🎙️ Generando respuesta final...")
+    logChatEvent("generator", {
+      userId,
+      systemContextLength: systemContext.length,
+    })
 
     const modelMessages = await convertToModelMessages(messages)
     const result = streamText({
@@ -234,7 +270,19 @@ INSTRUCCIONES:
 
     return result.toUIMessageStreamResponse()
   } catch (error) {
-    console.error("🔥 Error CRÍTICO en route.ts:", error)
+    logger.error(
+      {
+        error,
+        userId: session?.user?.id,
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      "Error crítico en /api/chat"
+    )
+    logChatEvent("error", {
+      userId: session?.user?.id,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     const message = error instanceof Error ? error.message : String(error)
     return new Response(
       JSON.stringify({

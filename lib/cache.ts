@@ -1,58 +1,100 @@
 /**
- * Caché en memoria con TTL (Time-To-Live).
+ * Capa de caché con Upstash Redis.
  *
- * Para MVP: caché in-process (se pierde entre cold-starts, pero elimina
- * queries repetitivas dentro de la misma instancia serverless).
- *
- * Para escalar: reemplazar con Upstash Redis (misma interfaz).
- *
- * Uso en el chatbot:
- *   const data = await cached(`balance:${userId}`, 30, () => getDashboardData(userId))
+ * - Reutiliza la misma instancia Redis que el rate limiter.
+ * - TTL por defecto: 30 segundos (ideal para datos financieros que cambian poco).
+ * - Si Redis falla, la app sigue funcionando (cache miss silencioso).
  */
 
-type CacheEntry<T> = {
-  data: T
-  expiresAt: number
-}
+import { Redis } from "@upstash/redis"
 
-const store = new Map<string, CacheEntry<unknown>>()
+const redis = Redis.fromEnv()
+
+// ---------------------------------------------------------------------------
+// Funciones principales
+// ---------------------------------------------------------------------------
 
 /**
- * Ejecuta `fn()` y cachea el resultado por `ttlSeconds`.
- * Si hay un valor en caché no expirado, lo devuelve sin ejecutar `fn`.
+ * Lee un valor del cache. Retorna `null` si no existe o si Redis falla.
  */
-export async function cached<T>(
-  key: string,
-  ttlSeconds: number,
-  fn: () => Promise<T>
-): Promise<T> {
-  const now = Date.now()
-  const entry = store.get(key) as CacheEntry<T> | undefined
-
-  if (entry && entry.expiresAt > now) {
-    return entry.data
+export async function getCached<T>(key: string): Promise<T | null> {
+  try {
+    const data = await redis.get<T>(key)
+    return data ?? null
+  } catch (error) {
+    console.warn("[cache] Error al leer:", key, error)
+    return null
   }
-
-  const data = await fn()
-  store.set(key, { data, expiresAt: now + ttlSeconds * 1000 })
-  return data
 }
 
 /**
- * Invalida una clave específica (ej: cuando el usuario crea un movimiento).
+ * Guarda un valor en cache con TTL en segundos (default 30s).
  */
-export function invalidateCache(key: string): void {
-  store.delete(key)
+export async function setCached<T>(key: string, value: T, ttlSeconds = 30): Promise<void> {
+  try {
+    await redis.set(key, JSON.stringify(value), { ex: ttlSeconds })
+  } catch (error) {
+    console.warn("[cache] Error al escribir:", key, error)
+  }
 }
 
 /**
- * Invalida todas las claves que empiezan con un prefijo.
- * Ej: invalidateCacheByPrefix(`balance:${userId}`) borra todo el caché del usuario.
+ * Invalida (elimina) una o más claves del cache.
+ * Acepta claves exactas. Para patrones usa `invalidateUserCache`.
  */
-export function invalidateCacheByPrefix(prefix: string): void {
-  for (const key of store.keys()) {
-    if (key.startsWith(prefix)) {
-      store.delete(key)
+export async function invalidateCache(...keys: string[]): Promise<void> {
+  if (keys.length === 0) return
+  try {
+    await redis.del(...keys)
+  } catch (error) {
+    console.warn("[cache] Error al invalidar:", keys, error)
+  }
+}
+
+/**
+ * Invalida todas las claves de cache asociadas a un usuario.
+ * Borra dashboard + movimientos de un userId específico.
+ */
+export async function invalidateUserCache(userId: string): Promise<void> {
+  try {
+    // Claves conocidas para este usuario
+    const keys = [
+      `dashboard:${userId}`,
+      `movimientos:${userId}`,
+    ]
+
+    // Buscar claves de movimientos con filtros (movimientos:userId:*)
+    const filterKeys = await redis.keys(`movimientos:${userId}:*`)
+    if (filterKeys.length > 0) {
+      keys.push(...filterKeys)
     }
+
+    if (keys.length > 0) {
+      await redis.del(...keys)
+    }
+  } catch (error) {
+    console.warn("[cache] Error al invalidar cache de usuario:", userId, error)
   }
 }
+
+// ---------------------------------------------------------------------------
+// Helpers para generar claves consistentes
+// ---------------------------------------------------------------------------
+
+export const cacheKeys = {
+  dashboard: (userId: string) => `dashboard:${userId}`,
+
+  movimientos: (userId: string, filters?: { startDate?: string; endDate?: string; categoryId?: string }) => {
+    if (!filters || (!filters.startDate && !filters.endDate && !filters.categoryId)) {
+      return `movimientos:${userId}`
+    }
+    // Clave determinista basada en los filtros
+    const parts = [
+      `movimientos:${userId}`,
+      filters.startDate ?? "_",
+      filters.endDate ?? "_",
+      filters.categoryId ?? "_",
+    ]
+    return parts.join(":")
+  },
+} as const

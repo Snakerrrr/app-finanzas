@@ -9,6 +9,7 @@
  */
 
 import { prisma } from "@/lib/db"
+import { getCached, setCached, cacheKeys, invalidateUserCache } from "@/lib/cache"
 
 // ---------------------------------------------------------------------------
 // Tipos para el cliente (respuestas)
@@ -264,6 +265,11 @@ export async function ensureDefaultCategories(userId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function getDashboardData(userId: string): Promise<DashboardData> {
+  // Cache: intentar leer del cache primero (TTL 30s)
+  const cacheKey = cacheKeys.dashboard(userId)
+  const cached = await getCached<DashboardData>(cacheKey)
+  if (cached) return cached
+
   await ensureDefaultCategories(userId)
   const now = new Date()
   const mesActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -339,7 +345,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   }
   const categoryStats: CategoryStat[] = Array.from(categoryStatsMap.values()).sort((a, b) => b.value - a.value)
 
-  return {
+  const result: DashboardData = {
     balanceTotal,
     movimientos,
     movimientosMes,
@@ -386,6 +392,11 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
       montoPresupuestadoCLP: p.montoPresupuestadoCLP,
     })),
   }
+
+  // Cache: guardar resultado (TTL 30s)
+  await setCached(cacheKey, result, 30)
+
+  return result
 }
 
 /** Filtros opcionales para buscar movimientos */
@@ -403,6 +414,11 @@ export async function getMovimientos(
   userId: string,
   filters?: GetMovimientosFilters
 ): Promise<MovimientoForClient[]> {
+  // Cache: intentar leer del cache primero (TTL 30s)
+  const cacheKey = cacheKeys.movimientos(userId, filters)
+  const cached = await getCached<MovimientoForClient[]>(cacheKey)
+  if (cached) return cached
+
   await ensureDefaultCategories(userId)
   const where: { userId: string; fecha?: { gte?: Date; lte?: Date }; categoriaId?: string } = {
     userId,
@@ -424,7 +440,12 @@ export async function getMovimientos(
     include: { categoria: true, cuentaOrigen: true, cuentaDestino: true },
     orderBy: { fecha: "desc" },
   })
-  return raw.map(toMovimientoForClient)
+  const result = raw.map(toMovimientoForClient)
+
+  // Cache: guardar resultado (TTL 30s)
+  await setCached(cacheKey, result, 30)
+
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +506,10 @@ export async function createMovimiento(
       })
     }
   })
+
+  // Cache: invalidar datos del usuario tras crear movimiento
+  await invalidateUserCache(userId)
+
   return { success: true }
 }
 
@@ -588,6 +613,10 @@ export async function updateMovimiento(
       })
     }
   })
+
+  // Cache: invalidar datos del usuario tras actualizar movimiento
+  await invalidateUserCache(userId)
+
   return { success: true }
 }
 
@@ -620,6 +649,10 @@ export async function deleteMovimiento(userId: string, id: string): Promise<Resu
     }
     await tx.movimiento.delete({ where: { id, userId } })
   })
+
+  // Cache: invalidar datos del usuario tras eliminar movimiento
+  await invalidateUserCache(userId)
+
   return { success: true }
 }
 
@@ -640,6 +673,7 @@ export async function createCuenta(
       saldoCalculado: data.saldoInicialMes ?? 0,
     },
   })
+  await invalidateUserCache(userId)
   return { success: true, id: cuenta.id }
 }
 
@@ -658,6 +692,7 @@ export async function updateCuenta(
   if (data.saldoFinalMesDeclarado !== undefined) updateData.saldoFinalMesDeclarado = data.saldoFinalMesDeclarado
   if (Object.keys(updateData).length === 0) return { success: true }
   await prisma.cuenta.update({ where: { id }, data: updateData })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 

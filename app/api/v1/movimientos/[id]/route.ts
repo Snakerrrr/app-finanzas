@@ -6,6 +6,7 @@ import {
   getDashboardData,
   type UpdateMovimientoInput,
 } from "@/lib/services/finance.service"
+import { authenticateAPIRequest } from "@/lib/auth-api"
 
 const TIPOS_MOVIMIENTO = ["Ingreso", "Gasto", "Transferencia"] as const
 const METODOS_PAGO = ["Débito", "Crédito", "Efectivo", "Transferencia"] as const
@@ -30,13 +31,6 @@ const updateMovimientoSchema = z.object({
   tarjetaCreditoId: z.string().optional().nullable(),
 })
 
-// TODO: Implementar validación de Token JWT (app móvil sin cookies de sesión)
-function getUserIdFromRequest(request: NextRequest): string | null {
-  const userId = request.headers.get("x-user-id")
-  if (userId?.trim()) return userId.trim()
-  return null
-}
-
 type RouteContext = { params: Promise<{ id: string }> }
 
 /** GET /api/v1/movimientos/:id - Obtiene un movimiento por id */
@@ -44,13 +38,16 @@ export async function GET(
   request: NextRequest,
   context: RouteContext
 ) {
-  const userId = getUserIdFromRequest(request)
-  if (!userId) {
+  // Autenticación dual: cookies (web) o Bearer token (móvil)
+  const authResult = await authenticateAPIRequest(request)
+  if (!authResult.success || !authResult.userId) {
     return NextResponse.json(
-      { error: "No autorizado. Envía el header x-user-id." },
+      { error: authResult.error || "No autorizado" },
       { status: 401 }
     )
   }
+  
+  const userId = authResult.userId
 
   const { id } = await context.params
   try {
@@ -77,13 +74,16 @@ export async function PUT(
   request: NextRequest,
   context: RouteContext
 ) {
-  const userId = getUserIdFromRequest(request)
-  if (!userId) {
+  // Autenticación dual: cookies (web) o Bearer token (móvil)
+  const authResult = await authenticateAPIRequest(request)
+  if (!authResult.success || !authResult.userId) {
     return NextResponse.json(
-      { error: "No autorizado. Envía el header x-user-id." },
+      { error: authResult.error || "No autorizado" },
       { status: 401 }
     )
   }
+  
+  const userId = authResult.userId
 
   const { id } = await context.params
   let body: unknown
@@ -122,13 +122,16 @@ export async function DELETE(
   request: NextRequest,
   context: RouteContext
 ) {
-  const userId = getUserIdFromRequest(request)
-  if (!userId) {
+  // Autenticación dual: cookies (web) o Bearer token (móvil)
+  const authResult = await authenticateAPIRequest(request)
+  if (!authResult.success || !authResult.userId) {
     return NextResponse.json(
-      { error: "No autorizado. Envía el header x-user-id." },
+      { error: authResult.error || "No autorizado" },
       { status: 401 }
     )
   }
+  
+  const userId = authResult.userId
 
   const { id } = await context.params
   try {

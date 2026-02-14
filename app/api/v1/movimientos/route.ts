@@ -6,6 +6,7 @@ import {
   ensureDefaultCategories,
   type CreateMovimientoInput,
 } from "@/lib/services/finance.service"
+import { authenticateAPIRequest } from "@/lib/auth-api"
 
 const TIPOS_MOVIMIENTO = ["Ingreso", "Gasto", "Transferencia"] as const
 const METODOS_PAGO = ["Débito", "Crédito", "Efectivo", "Transferencia"] as const
@@ -30,22 +31,18 @@ const createMovimientoSchema = z.object({
   tarjetaCreditoId: z.string().optional(),
 })
 
-// TODO: Implementar validación de Token JWT (app móvil sin cookies de sesión)
-function getUserIdFromRequest(request: NextRequest): string | null {
-  const userId = request.headers.get("x-user-id")
-  if (userId?.trim()) return userId.trim()
-  return null
-}
-
 /** GET /api/v1/movimientos - Lista movimientos del usuario */
 export async function GET(request: NextRequest) {
-  const userId = getUserIdFromRequest(request)
-  if (!userId) {
+  // Autenticación dual: cookies (web) o Bearer token (móvil)
+  const authResult = await authenticateAPIRequest(request)
+  if (!authResult.success || !authResult.userId) {
     return NextResponse.json(
-      { error: "No autorizado. Envía el header x-user-id." },
+      { error: authResult.error || "No autorizado" },
       { status: 401 }
     )
   }
+  
+  const userId = authResult.userId
 
   try {
     await ensureDefaultCategories(userId)
@@ -71,13 +68,16 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/v1/movimientos - Crea un movimiento */
 export async function POST(request: NextRequest) {
-  const userId = getUserIdFromRequest(request)
-  if (!userId) {
+  // Autenticación dual: cookies (web) o Bearer token (móvil)
+  const authResult = await authenticateAPIRequest(request)
+  if (!authResult.success || !authResult.userId) {
     return NextResponse.json(
-      { error: "No autorizado. Envía el header x-user-id." },
+      { error: authResult.error || "No autorizado" },
       { status: 401 }
     )
   }
+  
+  const userId = authResult.userId
 
   let body: unknown
   try {

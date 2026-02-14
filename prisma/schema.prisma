@@ -197,7 +197,9 @@ model Movimiento {
   cuentaDestino  Cuenta?       @relation("CuentaDestino", fields: [cuentaDestinoId], references: [id], onDelete: SetNull)
   tarjetaCredito TarjetaCredito? @relation(fields: [tarjetaCreditoId], references: [id], onDelete: SetNull)
 
-  @@index([userId])
-  @@index([userId, mesConciliacion])
-  @@index([fecha])
+  // Índices optimizados para queries frecuentes
+  @@index([userId, fecha(sort: Desc)], name: "idx_user_fecha_desc")
+  @@index([userId, categoriaId, fecha(sort: Desc)], name: "idx_user_cat_fecha")
+  @@index([userId, mesConciliacion], name: "idx_user_mes")
+  @@index([userId, tipoMovimiento, fecha(sort: Desc)], name: "idx_user_tipo_fecha")
 }

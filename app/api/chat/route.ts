@@ -4,6 +4,7 @@ import { getDashboardData, getMovimientos } from "@/lib/services/finance.service
 import { openai } from "@ai-sdk/openai"
 import { convertToModelMessages, generateObject, streamText } from "ai"
 import { z } from "zod"
+import { chatRateLimit, ipRateLimit } from "@/lib/rate-limit"
 
 export const maxDuration = 60
 
@@ -61,6 +62,33 @@ export async function POST(req: Request) {
       return new Response("Unauthorized", { status: 401 })
     }
     const userId = session.user.id
+
+    // 2. Rate Limiting por Usuario
+    const userLimit = await chatRateLimit.limit(userId)
+    if (!userLimit.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Demasiados mensajes. Intenta de nuevo en 1 minuto.",
+          retryAfter: userLimit.reset,
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "X-RateLimit-Limit": userLimit.limit.toString(),
+            "X-RateLimit-Remaining": userLimit.remaining.toString(),
+            "X-RateLimit-Reset": new Date(userLimit.reset).toISOString(),
+          },
+        }
+      )
+    }
+
+    // 3. Rate Limiting por IP (protección adicional)
+    const ip = req.headers.get("x-forwarded-for") ?? "unknown"
+    const ipLimit = await ipRateLimit.limit(ip)
+    if (!ipLimit.success) {
+      return new Response("Too many requests from this IP", { status: 429 })
+    }
 
     const apiKey = process.env.OPENAI_API_KEY?.trim()
     if (!apiKey) {

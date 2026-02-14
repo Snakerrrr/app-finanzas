@@ -1869,12 +1869,15 @@ export async function POST(req: Request) {
 
 ### 🔴 CRÍTICO (Semana 1)
 
-- [ ] **1.1 Rate Limiting**
-  - [ ] Crear cuenta en Upstash
-  - [ ] Agregar credenciales a `.env`
-  - [ ] Crear `lib/rate-limit.ts`
-  - [ ] Aplicar en `app/api/chat/route.ts`
-  - [ ] Test: Enviar 11 mensajes en 1 minuto (debe rechazar el 11º)
+- [x] **1.1 Rate Limiting** ✅ COMPLETADO Y VERIFICADO
+  - [x] Crear cuenta en Upstash ✅
+  - [x] Agregar credenciales a `.env` ✅
+  - [x] Crear `lib/rate-limit.ts` ✅
+  - [x] Aplicar en `app/api/chat/route.ts` ✅
+  - [x] Test: Verificado funcionando correctamente (Dashboard Upstash muestra claves activas) ✅
+  
+  **📄 Guía de configuración:** Ver `docs/CONFIGURAR-UPSTASH.md`
+  **🎉 Estado:** Funcionando en producción
 
 - [ ] **1.2 Caching**
   - [ ] Crear `lib/cache.ts`

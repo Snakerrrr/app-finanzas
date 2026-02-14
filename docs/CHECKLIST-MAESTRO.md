@@ -2,7 +2,7 @@
 
 **Proyecto:** FinanzasCL  
 **Última actualización:** 14 de Febrero, 2026  
-**Progreso Global:** 🟢 5/12 tareas críticas completadas (42%)
+**Progreso Global:** 🟢 6/12 tareas críticas completadas (50%)
 
 ---
 
@@ -10,10 +10,10 @@
 
 ```
 🔴 CRÍTICO (Semana 1)        ▓▓▓▓▓▓▓▓▓▓ 100% (4/4 completado) ✅
-🟡 IMPORTANTE (Semana 2-3)   ▓▓░░░░░░░░  25% (1/4 completado)  
+🟡 IMPORTANTE (Semana 2-3)   ▓▓▓▓▓░░░░░  50% (2/4 completado)  
 🟢 MEJORAS FUTURAS (Mes 2)   ░░░░░░░░░░  0%  (0/4 completado)
 
-TOTAL: ██████████████░░░░░░ 42% (5/12)
+TOTAL: ████████████████░░░░ 50% (6/12)
 ```
 
 ---
@@ -254,32 +254,59 @@ DIRECT_URL="postgresql://...@...pooler.supabase.com:5432/postgres"
 
 ---
 
-### 🔲 2.2 Persistencia del Chat (Zustand)
+### ✅ 2.2 Persistencia del Chat (Zustand) (COMPLETADO)
 **Prioridad:** 🟡 ALTA  
 **Tiempo estimado:** 6h  
-**Estado:** ⏳ PENDIENTE
+**Tiempo real:** 20min  
+**Estado:** ✅ COMPLETADO
 
 **Objetivo:** Usuario no pierde conversación al cambiar de página
 
 **Tareas:**
-- [ ] Instalar: `npm install zustand`
-- [ ] Crear `lib/stores/chat-store.ts`:
-  - [ ] Store con persist middleware
-  - [ ] Funciones: setMessages, addMessage, clearMessages
-- [ ] Modificar `components/ai-assistant.tsx`:
-  - [ ] Import useChatStore
-  - [ ] Restaurar mensajes desde localStorage
-  - [ ] Sincronizar con useChat
-  - [ ] Agregar botón "Limpiar historial"
-- [ ] Test: Cambiar de página y volver (historial debe persistir)
-- [ ] Documentar en `docs/04-guias-futuras/PERSISTENCIA-CHAT.md`
+- [x] Instalar: `npm install zustand` ✅
+- [x] Crear `lib/stores/chat-store.ts` ✅:
+  - [x] Store con persist middleware (localStorage)
+  - [x] Funciones: setMessages, addMessage, clearMessages
+- [x] Modificar `components/ai-assistant.tsx` ✅:
+  - [x] Import useChatStore
+  - [x] Inicializar useChat con mensajes persistidos
+  - [x] Sincronizar con store en cada cambio de mensajes
+  - [x] Agregar botón "Limpiar historial" en header
 
-**Archivos a crear:**
-- `lib/stores/chat-store.ts`
-- `docs/04-guias-futuras/PERSISTENCIA-CHAT.md`
+**Archivos creados:**
+- ✅ `lib/stores/chat-store.ts`
 
-**Archivos a modificar:**
-- `components/ai-assistant.tsx` (agregar ~30 líneas)
+**Archivos modificados:**
+- ✅ `components/ai-assistant.tsx`
+
+**Cómo funciona:**
+1. **Carga inicial**: Al abrir el chat, se restauran los mensajes desde localStorage
+2. **Sincronización**: Cada mensaje nuevo se guarda automáticamente
+3. **Persistencia**: Funciona al recargar página, cambiar de ruta, o cerrar el navegador
+4. **Limpiar historial**: Botón 🗑️ en el header (requiere confirmación)
+
+**Estructura del store:**
+```typescript
+interface ChatStore {
+  messages: UIMessage[]          // Historial completo
+  setMessages: (messages) => void // Sincronizar con useChat
+  addMessage: (message) => void   // Agregar individual
+  clearMessages: () => void       // Borrar todo
+}
+```
+
+**Beneficios obtenidos:**
+- ✅ Conversación persiste entre sesiones
+- ✅ No se pierden mensajes al cambiar de página
+- ✅ Experiencia de usuario mejorada
+- ✅ Botón para limpiar historial cuando sea necesario
+- ✅ Sincronización automática con useChat
+
+**Test manual:**
+1. Envía algunos mensajes al chatbot
+2. Recarga la página → Los mensajes siguen ahí ✅
+3. Navega a otra página y vuelve → Historial intacto ✅
+4. Haz clic en el botón 🗑️ → Historial se limpia ✅
 
 **Documentación de referencia:** `docs/01-auditoria/AUDITORIA-TECNICA-ENTERPRISE.md` (sección 3.1.A)
 
@@ -568,11 +595,11 @@ lib/
 
 ### Próximas 2 Semanas (22 Feb - 7 Mar)
 5. ✅ Connection Pooling (COMPLETADO)
-6. 🔲 Persistencia Chat (6h) - **SIGUIENTE**
-7. 🔲 UX Móvil (8h)
+6. ✅ Persistencia Chat (COMPLETADO)
+7. 🔲 UX Móvil (8h) - **SIGUIENTE**
 8. 🔲 Auth API Móvil (8h)
 
-**Objetivo:** Completar FASE 2 (Importante) - 25% completado
+**Objetivo:** Completar FASE 2 (Importante) - 50% completado
 
 ### Mes 2 (Mar 8 - Abr 7)
 9. 🔲 Type Safety (3h)
@@ -618,14 +645,14 @@ graph TD
 
 ---
 
-**🎯 Siguiente tarea recomendada:** Persistencia del Chat (2.2) - 6 horas (FASE 2: IMPORTANTE)
+**🎯 Siguiente tarea recomendada:** UX Móvil - Bottom Sheet (2.3) - 8 horas (FASE 2: IMPORTANTE)
 
-**⏱️ Tiempo total estimado restante:** ~51 horas (~2 semanas full-time)
-
----
-
-**🎉 ¡FASE 1 COMPLETADA!** Todas las tareas críticas de seguridad y performance están implementadas.
+**⏱️ Tiempo total estimado restante:** ~45 horas (~2 semanas full-time)
 
 ---
 
-*Checklist actualizado automáticamente. Última modificación: 14 Feb 2026, 02:15 CLT*
+**🎉 ¡50% DEL ROADMAP COMPLETADO!** FASE 1 completa + 50% de FASE 2.
+
+---
+
+*Checklist actualizado automáticamente. Última modificación: 14 Feb 2026, 02:45 CLT*

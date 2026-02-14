@@ -1,10 +1,21 @@
 "use client"
 
 import { useChat } from "@ai-sdk/react"
-import { MessageCircle, X, Send, Bot, Loader2, Sparkles } from "lucide-react"
+import { MessageCircle, X, Send, Bot, Loader2, Sparkles, Trash2 } from "lucide-react"
 import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { UIMessage } from "ai"
+import { useChatStore } from "@/lib/stores/chat-store"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 /**
  * AiAssistant - Chatbot Financiero
@@ -36,15 +47,42 @@ function hasVisibleText(message: UIMessage): boolean {
 export function AiAssistant() {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const { messages, sendMessage, status, error } = useChat({
+  // Store de persistencia
+  const { messages: storedMessages, setMessages: setStoredMessages, clearMessages, _hasHydrated } = useChatStore()
+
+  const { messages, sendMessage, status, error, setMessages } = useChat({
+    // Empezar vacío - se restaurarán después de la hidratación
+    initialMessages: [],
     onError: (err) => {
       console.error("Error en el chat:", err)
     },
   })
 
   const isLoading = status === "streaming" || status === "submitted"
+
+  // Restaurar mensajes desde localStorage después de la hidratación
+  useEffect(() => {
+    if (_hasHydrated && storedMessages.length > 0 && messages.length === 0) {
+      setMessages(storedMessages)
+    }
+  }, [_hasHydrated, storedMessages, messages.length, setMessages])
+
+  // Sincronizar mensajes con el store cada vez que cambien
+  useEffect(() => {
+    if (messages.length > 0) {
+      setStoredMessages(messages)
+    }
+  }, [messages, setStoredMessages])
+
+  // Función para confirmar limpieza del historial
+  const handleConfirmClear = () => {
+    clearMessages()
+    setMessages([])
+    setShowDeleteDialog(false)
+  }
 
   // Auto-scroll cuando llegan nuevos mensajes o cambia el streaming
   useEffect(() => {
@@ -108,7 +146,21 @@ export function AiAssistant() {
                   </div>
                 </div>
               </div>
-              <Sparkles className="h-4 w-4 text-primary/40" />
+              <div className="flex items-center gap-2">
+                {/* Botón para limpiar historial */}
+                {messages.length > 0 && (
+                  <Button
+                    onClick={() => setShowDeleteDialog(true)}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    title="Borrar historial"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+                <Sparkles className="h-4 w-4 text-primary/40" />
+              </div>
             </div>
           </div>
 
@@ -230,6 +282,27 @@ export function AiAssistant() {
           </div>
         </div>
       )}
+
+      {/* Dialog de confirmación para limpiar historial */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Borrar todo el historial?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará toda la conversación permanentemente. No se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmClear}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Borrar historial
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

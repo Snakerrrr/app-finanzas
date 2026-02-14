@@ -7,6 +7,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
 import { AiAssistant } from "@/components/ai-assistant"
+import { AiAssistantMobile } from "@/components/ai-assistant-mobile"
 import { Toaster } from "@/components/ui/toaster"
 
 const inter = Inter({
@@ -37,6 +38,12 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-icon.png",
   },
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    viewportFit: "cover", // Importante para iOS safe area
+  },
 }
 
 export default function RootLayout({
@@ -52,7 +59,14 @@ export default function RootLayout({
             <AuthProvider>
               {children}
               <Toaster />
-              <AiAssistant />
+              {/* Versión Desktop (pantallas >= md) */}
+              <div className="hidden md:block">
+                <AiAssistant />
+              </div>
+              {/* Versión Mobile (pantallas < md) */}
+              <div className="md:hidden">
+                <AiAssistantMobile />
+              </div>
             </AuthProvider>
           </SessionProvider>
           <Analytics />

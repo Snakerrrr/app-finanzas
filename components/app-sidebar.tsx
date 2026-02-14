@@ -12,16 +12,20 @@ import {
   Settings,
   FolderKanban,
   TrendingUp,
+  Repeat,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const menuItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/movimientos", label: "Movimientos", icon: ArrowLeftRight },
+  { href: "/recurrentes", label: "Gastos Recurrentes", icon: Repeat },
   { href: "/presupuestos", label: "Presupuestos", icon: PiggyBank },
   { href: "/tarjetas", label: "Tarjetas de Crédito", icon: CreditCard },
   { href: "/metas", label: "Metas de Ahorro", icon: Target },
   { href: "/conciliacion", label: "Conciliación Mensual", icon: CheckCircle2 },
+  { href: "/familia", label: "Grupo Familiar", icon: Users },
   { href: "/categorias", label: "Categorías & Cuentas", icon: FolderKanban },
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ]

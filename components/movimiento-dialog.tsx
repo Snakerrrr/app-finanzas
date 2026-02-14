@@ -34,6 +34,7 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
   const { toast } = useToast()
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isQuickMode, setIsQuickMode] = useState(mode === "create")
 
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split("T")[0],
@@ -188,6 +189,31 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
             {mode === "create" ? "Registra un nuevo movimiento financiero" : "Modifica los datos del movimiento"}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Toggle Modo Rápido / Completo */}
+        {mode === "create" && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-2">
+            <button
+              type="button"
+              onClick={() => setIsQuickMode(true)}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                isQuickMode ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Rápido
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsQuickMode(false)}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                !isQuickMode ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Completo
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -308,96 +334,101 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
             </div>
           </div>
 
-          {formData.metodoPago === "Crédito" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="tarjetaCreditoId">Tarjeta de Crédito</Label>
-                <Select
-                  value={formData.tarjetaCreditoId}
-                  onValueChange={(value) => setFormData({ ...formData, tarjetaCreditoId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tarjetasCredito.map((tc) => (
-                      <SelectItem key={tc.id} value={tc.id}>
-                        {tc.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          {/* --- Campos avanzados (solo en modo completo o edición) --- */}
+          {(!isQuickMode || mode === "edit") && (
+            <>
+              {formData.metodoPago === "Crédito" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="tarjetaCreditoId">Tarjeta de Crédito</Label>
+                    <Select
+                      value={formData.tarjetaCreditoId}
+                      onValueChange={(value) => setFormData({ ...formData, tarjetaCreditoId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tarjetasCredito.map((tc) => (
+                          <SelectItem key={tc.id} value={tc.id}>
+                            {tc.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cuotas">Cuotas</Label>
+                    <Input
+                      id="cuotas"
+                      type="number"
+                      min="1"
+                      value={formData.cuotas}
+                      onChange={(e) => setFormData({ ...formData, cuotas: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(formData.metodoPago === "Débito" || formData.metodoPago === "Efectivo") && (
+                <div className="space-y-2">
+                  <Label htmlFor="cuentaOrigenId">Cuenta Origen</Label>
+                  <Select
+                    value={formData.cuentaOrigenId}
+                    onValueChange={(value) => setFormData({ ...formData, cuentaOrigenId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cuentas
+                        .filter((c) => c.activo)
+                        .map((cuenta) => (
+                          <SelectItem key={cuenta.id} value={cuenta.id}>
+                            {cuenta.nombre}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {formData.tipoMovimiento === "Transferencia" && (
+                <div className="space-y-2">
+                  <Label htmlFor="cuentaDestinoId">Cuenta Destino</Label>
+                  <Select
+                    value={formData.cuentaDestinoId}
+                    onValueChange={(value) => setFormData({ ...formData, cuentaDestinoId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cuentas
+                        .filter((c) => c.activo)
+                        .map((cuenta) => (
+                          <SelectItem key={cuenta.id} value={cuenta.id}>
+                            {cuenta.nombre}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
-                <Label htmlFor="cuotas">Cuotas</Label>
-                <Input
-                  id="cuotas"
-                  type="number"
-                  min="1"
-                  value={formData.cuotas}
-                  onChange={(e) => setFormData({ ...formData, cuotas: Number(e.target.value) })}
+                <Label htmlFor="notas">Notas</Label>
+                <Textarea
+                  id="notas"
+                  value={formData.notas}
+                  onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                  placeholder="Notas adicionales (opcional)"
+                  rows={3}
                 />
               </div>
-            </div>
+            </>
           )}
-
-          {(formData.metodoPago === "Débito" || formData.metodoPago === "Efectivo") && (
-            <div className="space-y-2">
-              <Label htmlFor="cuentaOrigenId">Cuenta Origen</Label>
-              <Select
-                value={formData.cuentaOrigenId}
-                onValueChange={(value) => setFormData({ ...formData, cuentaOrigenId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {cuentas
-                    .filter((c) => c.activo)
-                    .map((cuenta) => (
-                      <SelectItem key={cuenta.id} value={cuenta.id}>
-                        {cuenta.nombre}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {formData.tipoMovimiento === "Transferencia" && (
-            <div className="space-y-2">
-              <Label htmlFor="cuentaDestinoId">Cuenta Destino</Label>
-              <Select
-                value={formData.cuentaDestinoId}
-                onValueChange={(value) => setFormData({ ...formData, cuentaDestinoId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {cuentas
-                    .filter((c) => c.activo)
-                    .map((cuenta) => (
-                      <SelectItem key={cuenta.id} value={cuenta.id}>
-                        {cuenta.nombre}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="notas">Notas</Label>
-            <Textarea
-              id="notas"
-              value={formData.notas}
-              onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-              placeholder="Notas adicionales (opcional)"
-              rows={3}
-            />
-          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

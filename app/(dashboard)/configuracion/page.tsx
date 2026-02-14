@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Info, Trash2 } from "lucide-react"
 import { useState } from "react"
+import { NotificationSettings } from "@/components/notifications/notification-settings"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,6 +76,8 @@ export default function ConfiguracionPage() {
           </div>
         </CardContent>
       </Card>
+
+      <NotificationSettings />
 
       <Card className="border-destructive">
         <CardHeader>

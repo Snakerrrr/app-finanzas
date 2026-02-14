@@ -90,6 +90,7 @@ export type DashboardData = {
   balanceTotal: number
   movimientos: MovimientoForClient[]
   movimientosMes: MovimientoForClient[]
+  movimientosMesAnterior: MovimientoForClient[] // Para comparación mensual
   monthlyStats: MonthlyStat[]
   categoryStats: CategoryStat[]
   cuentas: CuentaForClient[]
@@ -273,13 +274,16 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   await ensureDefaultCategories(userId)
   const now = new Date()
   const mesActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+  
+  // Calcular mes anterior para comparación
+  const mesAnteriorDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const mesAnterior = `${mesAnteriorDate.getFullYear()}-${String(mesAnteriorDate.getMonth() + 1).padStart(2, "0")}`
 
+  // ⚡ Optimización: Solo 5 queries en paralelo (antes eran 9).
+  // 1 query de movimientos (todos) y filtramos en memoria.
   const [
     cuentas,
     movimientosRaw,
-    movimientosMesRaw,
-    movimientosUltimos6Meses,
     categorias,
     tarjetasCredito,
     metasAhorro,
@@ -291,21 +295,6 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
       include: { categoria: true, cuentaOrigen: true, cuentaDestino: true },
       orderBy: { fecha: "desc" },
     }),
-    prisma.movimiento.findMany({
-      where: { userId, mesConciliacion: mesActual },
-      include: { categoria: true, cuentaOrigen: true, cuentaDestino: true },
-      orderBy: { fecha: "desc" },
-    }),
-    prisma.movimiento.findMany({
-      where: { userId, fecha: { gte: sixMonthsAgo } },
-      select: {
-        fecha: true,
-        tipoMovimiento: true,
-        montoCLP: true,
-        categoriaId: true,
-        categoria: { select: { nombre: true, color: true } },
-      },
-    }),
     prisma.categoria.findMany({ where: { userId }, orderBy: { nombre: "asc" } }),
     prisma.tarjetaCredito.findMany({ where: { userId }, orderBy: { nombre: "asc" } }),
     prisma.metaAhorro.findMany({ where: { userId }, orderBy: { nombre: "asc" } }),
@@ -314,7 +303,13 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
 
   const balanceTotal = cuentas.reduce((sum, c) => sum + c.saldoCalculado, 0)
   const movimientos = movimientosRaw.map(toMovimientoForClient)
-  const movimientosMes = movimientosMesRaw.map(toMovimientoForClient)
+
+  // Filtrar en memoria en lugar de hacer queries separadas
+  const movimientosMes = movimientos.filter((m) => m.mesConciliacion === mesActual)
+  const movimientosMesAnterior = movimientos.filter((m) => m.mesConciliacion === mesAnterior)
+
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+  const sixMonthsAgoStr = sixMonthsAgo.toISOString().slice(0, 10)
 
   const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sept", "Oct", "Nov", "Dic"]
   const monthlyStats: MonthlyStat[] = []
@@ -324,21 +319,24 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     const name = MONTH_NAMES[monthDate.getMonth()]
     let ingresos = 0
     let gastos = 0
-    for (const m of movimientosUltimos6Meses) {
-      const mYearMonth = `${m.fecha.getFullYear()}-${String(m.fecha.getMonth() + 1).padStart(2, "0")}`
-      if (mYearMonth !== yearMonth) continue
+    for (const m of movimientos) {
+      if (m.mesConciliacion !== yearMonth) continue
       if (m.tipoMovimiento === "Ingreso") ingresos += m.montoCLP
       if (m.tipoMovimiento === "Gasto") gastos += m.montoCLP
     }
     monthlyStats.push({ name, ingresos, gastos })
   }
 
+  // Construir categorías de los últimos 6 meses usando datos en memoria
+  const categoriasMap = new Map(categorias.map((c) => [c.id, { nombre: c.nombre, color: c.color }]))
   const categoryStatsMap = new Map<string, { name: string; value: number; color: string }>()
-  for (const m of movimientosUltimos6Meses) {
+  for (const m of movimientos) {
     if (m.tipoMovimiento !== "Gasto") continue
+    if (m.fecha < sixMonthsAgoStr) continue
     const key = m.categoriaId
-    const nombre = m.categoria?.nombre ?? "Sin categoría"
-    const color = m.categoria?.color ?? "#64748b"
+    const cat = categoriasMap.get(key)
+    const nombre = cat?.nombre ?? "Sin categoría"
+    const color = cat?.color ?? "#64748b"
     const current = categoryStatsMap.get(key)
     if (current) current.value += m.montoCLP
     else categoryStatsMap.set(key, { name: nombre, value: m.montoCLP, color })
@@ -349,6 +347,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     balanceTotal,
     movimientos,
     movimientosMes,
+    movimientosMesAnterior,
     monthlyStats,
     categoryStats,
     cuentas: cuentas.map((c) => ({

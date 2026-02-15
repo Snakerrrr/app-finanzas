@@ -36,9 +36,10 @@ import type { FamilyGroupForClient } from "@/lib/services/family.service"
 
 interface FamiliaClientProps {
   initialGroups: FamilyGroupForClient[]
+  currentUserId: string
 }
 
-export function FamiliaClient({ initialGroups }: FamiliaClientProps) {
+export function FamiliaClient({ initialGroups, currentUserId }: FamiliaClientProps) {
   const { toast } = useToast()
   const router = useRouter()
   const [groups, setGroups] = useState(initialGroups)
@@ -174,7 +175,7 @@ export function FamiliaClient({ initialGroups }: FamiliaClientProps) {
 
                 {/* Acciones */}
                 <div className="flex justify-end gap-2 pt-2">
-                  {group.miembros.some((m) => m.rol === "owner") ? (
+                  {group.propietarioId === currentUserId ? (
                     <Button
                       variant="destructive"
                       size="sm"

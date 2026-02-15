@@ -30,7 +30,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function MovimientosPage() {
-  const { movimientos, categorias, cuentas, refreshData } = useData()
+  const { movimientos, categorias, cuentas, refreshData, updateMovimiento: updateMovLocal, deleteMovimiento: deleteMovLocal } = useData()
   const [csvImportOpen, setCSVImportOpen] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
@@ -104,22 +104,25 @@ export default function MovimientosPage() {
       setDeleteDialogOpen(false)
       return
     }
-    const result = await deleteMovimiento(movimientoToDelete)
+    const idToDelete = movimientoToDelete
+    // Optimista: eliminar de la UI inmediatamente
+    deleteMovLocal(idToDelete)
     setDeleteDialogOpen(false)
     setMovimientoToDelete(null)
-    if (result.success) {
-      await refreshData()
-      router.refresh()
-      toast({
-        title: "Movimiento eliminado",
-        description: "El movimiento se ha eliminado correctamente",
-      })
-    } else {
+    toast({
+      title: "Movimiento eliminado",
+      description: "El movimiento se ha eliminado correctamente",
+    })
+    // Persistir en servidor en background
+    const result = await deleteMovimiento(idToDelete)
+    if (!result.success) {
       toast({
         title: "Error",
         description: result.error,
         variant: "destructive",
       })
+      // Re-sync si falló
+      await refreshData()
     }
   }
 
@@ -291,10 +294,12 @@ export default function MovimientosPage() {
                         key={mov.id}
                         movimiento={mov}
                         categorias={categorias}
-                        onSave={async () => {
+                        onSave={(updatedFields) => {
+                          // Optimista: actualizar estado local inmediatamente
+                          updateMovLocal(mov.id, updatedFields)
                           setInlineEditId(null)
-                          await refreshData()
-                          router.refresh()
+                          // Sync en background (no bloquea la UI)
+                          refreshData().catch(() => {})
                         }}
                         onCancel={() => setInlineEditId(null)}
                       />

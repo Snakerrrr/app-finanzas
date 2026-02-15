@@ -62,7 +62,12 @@ export type TarjetaForClient = {
   banco: string
   cupoTotal: number
   cupoDisponible: number
+  fechaFacturacion: number
+  fechaPago: number
+  tasaInteresMensual: number
   deudaActual: number
+  deudaFacturada: number
+  deudaNoFacturada: number
 }
 
 export type MetaForClient = {
@@ -176,8 +181,34 @@ export type UpdateMetaAhorroInput = {
   objetivoCLP?: number
   fechaObjetivo?: string
   aporteMensualSugerido?: number
+  acumuladoCLP?: number
   cuentaDestinoId?: string
   estado?: "Activa" | "Completada"
+}
+
+export type CreateTarjetaCreditoInput = {
+  nombre: string
+  banco: string
+  cupoTotal: number
+  cupoDisponible: number
+  fechaFacturacion: number
+  fechaPago: number
+  tasaInteresMensual: number
+  deudaActual?: number
+  deudaFacturada?: number
+  deudaNoFacturada?: number
+}
+export type UpdateTarjetaCreditoInput = {
+  nombre?: string
+  banco?: string
+  cupoTotal?: number
+  cupoDisponible?: number
+  fechaFacturacion?: number
+  fechaPago?: number
+  tasaInteresMensual?: number
+  deudaActual?: number
+  deudaFacturada?: number
+  deudaNoFacturada?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +403,12 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
       banco: t.banco,
       cupoTotal: t.cupoTotal,
       cupoDisponible: t.cupoDisponible,
+      fechaFacturacion: t.fechaFacturacion,
+      fechaPago: t.fechaPago,
+      tasaInteresMensual: t.tasaInteresMensual,
       deudaActual: t.deudaActual,
+      deudaFacturada: t.deudaFacturada,
+      deudaNoFacturada: t.deudaNoFacturada,
     })),
     metasAhorro: metasAhorro.map((m) => ({
       id: m.id,
@@ -838,6 +874,7 @@ export async function createMetaAhorro(
       estado: data.estado ?? "Activa",
     },
   })
+  await invalidateUserCache(userId)
   return { success: true, id: meta.id }
 }
 
@@ -859,6 +896,7 @@ export async function updateMetaAhorro(
     objetivoCLP?: number
     fechaObjetivo?: Date
     aporteMensualSugerido?: number
+    acumuladoCLP?: number
     cuentaDestinoId?: string
     estado?: string
   } = {}
@@ -866,10 +904,12 @@ export async function updateMetaAhorro(
   if (data.objetivoCLP != null) updateData.objetivoCLP = data.objetivoCLP
   if (data.fechaObjetivo != null) updateData.fechaObjetivo = new Date(data.fechaObjetivo + "T12:00:00Z")
   if (data.aporteMensualSugerido != null) updateData.aporteMensualSugerido = data.aporteMensualSugerido
+  if (data.acumuladoCLP != null) updateData.acumuladoCLP = data.acumuladoCLP
   if (data.cuentaDestinoId != null) updateData.cuentaDestinoId = data.cuentaDestinoId
   if (data.estado != null) updateData.estado = data.estado
   if (Object.keys(updateData).length === 0) return { success: true }
   await prisma.metaAhorro.update({ where: { id }, data: updateData })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 
@@ -877,6 +917,81 @@ export async function deleteMetaAhorro(userId: string, id: string): Promise<Resu
   const meta = await prisma.metaAhorro.findFirst({ where: { id, userId } })
   if (!meta) return { success: false, error: "Meta no encontrada" }
   await prisma.metaAhorro.delete({ where: { id } })
+  await invalidateUserCache(userId)
+  return { success: true }
+}
+
+export async function aportarMeta(
+  userId: string,
+  id: string,
+  monto: number
+): Promise<Result<ResultOk>> {
+  const meta = await prisma.metaAhorro.findFirst({ where: { id, userId } })
+  if (!meta) return { success: false, error: "Meta no encontrada" }
+  await prisma.metaAhorro.update({
+    where: { id },
+    data: { acumuladoCLP: { increment: monto } },
+  })
+  await invalidateUserCache(userId)
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// Tarjetas de Crédito CRUD
+// ---------------------------------------------------------------------------
+
+export async function createTarjetaCredito(
+  userId: string,
+  data: CreateTarjetaCreditoInput
+): Promise<Result<ResultOkId>> {
+  const tarjeta = await prisma.tarjetaCredito.create({
+    data: {
+      userId,
+      nombre: data.nombre,
+      banco: data.banco,
+      cupoTotal: data.cupoTotal,
+      cupoDisponible: data.cupoDisponible,
+      fechaFacturacion: data.fechaFacturacion,
+      fechaPago: data.fechaPago,
+      tasaInteresMensual: data.tasaInteresMensual,
+      deudaActual: data.deudaActual ?? 0,
+      deudaFacturada: data.deudaFacturada ?? 0,
+      deudaNoFacturada: data.deudaNoFacturada ?? 0,
+    },
+  })
+  await invalidateUserCache(userId)
+  return { success: true, id: tarjeta.id }
+}
+
+export async function updateTarjetaCredito(
+  userId: string,
+  id: string,
+  data: UpdateTarjetaCreditoInput
+): Promise<Result<ResultOk>> {
+  const tarjeta = await prisma.tarjetaCredito.findFirst({ where: { id, userId } })
+  if (!tarjeta) return { success: false, error: "Tarjeta no encontrada" }
+  const updateData: Record<string, number | string> = {}
+  if (data.nombre != null) updateData.nombre = data.nombre
+  if (data.banco != null) updateData.banco = data.banco
+  if (data.cupoTotal != null) updateData.cupoTotal = data.cupoTotal
+  if (data.cupoDisponible != null) updateData.cupoDisponible = data.cupoDisponible
+  if (data.fechaFacturacion != null) updateData.fechaFacturacion = data.fechaFacturacion
+  if (data.fechaPago != null) updateData.fechaPago = data.fechaPago
+  if (data.tasaInteresMensual != null) updateData.tasaInteresMensual = data.tasaInteresMensual
+  if (data.deudaActual != null) updateData.deudaActual = data.deudaActual
+  if (data.deudaFacturada != null) updateData.deudaFacturada = data.deudaFacturada
+  if (data.deudaNoFacturada != null) updateData.deudaNoFacturada = data.deudaNoFacturada
+  if (Object.keys(updateData).length === 0) return { success: true }
+  await prisma.tarjetaCredito.update({ where: { id }, data: updateData })
+  await invalidateUserCache(userId)
+  return { success: true }
+}
+
+export async function deleteTarjetaCredito(userId: string, id: string): Promise<Result<ResultOk>> {
+  const tarjeta = await prisma.tarjetaCredito.findFirst({ where: { id, userId } })
+  if (!tarjeta) return { success: false, error: "Tarjeta no encontrada" }
+  await prisma.tarjetaCredito.delete({ where: { id } })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 
@@ -900,3 +1015,6 @@ export const deletePresupuestoService = deletePresupuesto
 export const createMetaAhorroService = createMetaAhorro
 export const updateMetaAhorroService = updateMetaAhorro
 export const deleteMetaAhorroService = deleteMetaAhorro
+export const createTarjetaCreditoService = createTarjetaCredito
+export const updateTarjetaCreditoService = updateTarjetaCredito
+export const deleteTarjetaCreditoService = deleteTarjetaCredito

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 interface InlineEditRowProps {
   movimiento: Movimiento
   categorias: CategoriaForClient[]
-  onSave: () => void
+  onSave: (updatedFields: Partial<Movimiento>) => void
   onCancel: () => void
 }
 
@@ -27,16 +27,17 @@ export function InlineEditRow({ movimiento, categorias, onSave, onCancel }: Inli
 
   const handleSave = async () => {
     setSaving(true)
+    const updatedFields = {
+      descripcion,
+      montoCLP: parseFloat(monto),
+      categoriaId,
+      fecha,
+    }
     try {
-      const result = await updateMovimiento(movimiento.id, {
-        descripcion,
-        montoCLP: parseFloat(monto),
-        categoriaId,
-        fecha,
-      })
+      const result = await updateMovimiento(movimiento.id, updatedFields)
       if (result.success) {
         toast({ title: "Movimiento actualizado", description: "Los cambios se guardaron correctamente" })
-        onSave()
+        onSave(updatedFields)
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" })
       }

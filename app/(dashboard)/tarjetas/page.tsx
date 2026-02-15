@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +10,7 @@ import { useData } from "@/lib/data-context"
 import { formatCLP } from "@/lib/utils-finance"
 import { CreditCard, Calendar, AlertCircle, Plus, Pencil, Trash2 } from "lucide-react"
 import { TarjetaDialog } from "@/components/tarjeta-dialog"
+import { deleteTarjeta } from "@/app/actions/finance"
 import type { TarjetaCredito } from "@/lib/types"
 import {
   AlertDialog,
@@ -23,8 +25,9 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function TarjetasPage() {
-  const { tarjetasCredito, deleteTarjetaCredito } = useData()
+  const { tarjetasCredito, refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -52,13 +55,23 @@ export default function TarjetasPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (tarjetaToDelete) {
-      deleteTarjetaCredito(tarjetaToDelete)
-      toast({
-        title: "Tarjeta eliminada",
-        description: "La tarjeta de crédito se ha eliminado correctamente",
-      })
+      const result = await deleteTarjeta(tarjetaToDelete)
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Tarjeta eliminada",
+          description: "La tarjeta de crédito se ha eliminado correctamente",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
       setTarjetaToDelete(null)
     }
     setDeleteDialogOpen(false)

@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useData } from "@/lib/data-context"
+import { createMetaAhorro, updateMetaAhorro as updateMetaAction } from "@/app/actions/finance"
 import type { MetaAhorro } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -26,8 +28,10 @@ interface MetaDialogProps {
 }
 
 export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) {
-  const { addMetaAhorro, updateMetaAhorro, cuentas } = useData()
+  const { refreshData, cuentas } = useData()
   const { toast } = useToast()
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     nombre: "",
@@ -53,7 +57,7 @@ export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) 
     }
   }, [meta, mode])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.nombre || formData.objetivoCLP <= 0 || !formData.fechaObjetivo || !formData.cuentaDestinoId) {
@@ -66,21 +70,63 @@ export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) 
     }
 
     if (mode === "create") {
-      addMetaAhorro(formData)
-      toast({
-        title: "Meta creada",
-        description: "La meta de ahorro se ha registrado exitosamente",
+      setIsSubmitting(true)
+      const result = await createMetaAhorro({
+        nombre: formData.nombre.trim(),
+        objetivoCLP: Number(formData.objetivoCLP),
+        fechaObjetivo: formData.fechaObjetivo,
+        aporteMensualSugerido: Number(formData.aporteMensualSugerido) || 0,
+        cuentaDestinoId: formData.cuentaDestinoId,
+        estado: formData.estado,
       })
-    } else {
-      updateMetaAhorro(meta!.id, formData)
+      setIsSubmitting(false)
+
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Meta creada",
+          description: "La meta de ahorro se ha registrado exitosamente",
+        })
+        onOpenChange(false)
+        resetForm()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await updateMetaAction(meta!.id, {
+      nombre: formData.nombre.trim(),
+      objetivoCLP: Number(formData.objetivoCLP),
+      fechaObjetivo: formData.fechaObjetivo,
+      aporteMensualSugerido: Number(formData.aporteMensualSugerido) || 0,
+      cuentaDestinoId: formData.cuentaDestinoId,
+      estado: formData.estado,
+    })
+    setIsSubmitting(false)
+
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Meta actualizada",
         description: "Los cambios se han guardado correctamente",
       })
+      onOpenChange(false)
+      resetForm()
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-
-    onOpenChange(false)
-    resetForm()
   }
 
   const resetForm = () => {
@@ -137,6 +183,7 @@ export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) 
                 value={formData.acumuladoCLP || ""}
                 onChange={(e) => setFormData({ ...formData, acumuladoCLP: Number(e.target.value) })}
                 placeholder="0"
+                disabled={mode === "create"}
               />
             </div>
           </div>
@@ -185,10 +232,12 @@ export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) 
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{mode === "create" ? "Crear Meta" : "Guardar Cambios"}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {mode === "create" ? (isSubmitting ? "Guardando..." : "Crear Meta") : "Guardar Cambios"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

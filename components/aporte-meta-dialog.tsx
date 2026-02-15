@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useData } from "@/lib/data-context"
+import { aportarMeta } from "@/app/actions/finance"
 import { useToast } from "@/hooks/use-toast"
 
 interface AporteMetaDialogProps {
@@ -24,11 +26,13 @@ interface AporteMetaDialogProps {
 }
 
 export function AporteMetaDialog({ open, onOpenChange, metaId, metaNombre }: AporteMetaDialogProps) {
-  const { agregarAporteMeta } = useData()
+  const { refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
   const [monto, setMonto] = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (monto <= 0) {
@@ -40,14 +44,26 @@ export function AporteMetaDialog({ open, onOpenChange, metaId, metaNombre }: Apo
       return
     }
 
-    agregarAporteMeta(metaId, monto)
-    toast({
-      title: "Aporte registrado",
-      description: `Se ha agregado ${monto.toLocaleString("es-CL")} CLP a ${metaNombre}`,
-    })
+    setIsSubmitting(true)
+    const result = await aportarMeta(metaId, monto)
+    setIsSubmitting(false)
 
-    onOpenChange(false)
-    setMonto(0)
+    if (result.success) {
+      await refreshData()
+      router.refresh()
+      toast({
+        title: "Aporte registrado",
+        description: `Se ha agregado ${monto.toLocaleString("es-CL")} CLP a ${metaNombre}`,
+      })
+      onOpenChange(false)
+      setMonto(0)
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -71,10 +87,12 @@ export function AporteMetaDialog({ open, onOpenChange, metaId, metaNombre }: Apo
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">Registrar Aporte</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Registrando..." : "Registrar Aporte"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

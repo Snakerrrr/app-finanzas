@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useData } from "@/lib/data-context"
+import { createTarjeta, updateTarjeta as updateTarjetaAction } from "@/app/actions/finance"
 import type { TarjetaCredito } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
@@ -25,8 +27,10 @@ interface TarjetaDialogProps {
 }
 
 export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDialogProps) {
-  const { addTarjetaCredito, updateTarjetaCredito } = useData()
+  const { refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     nombre: "",
@@ -58,7 +62,7 @@ export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDial
     }
   }, [tarjeta, mode])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.nombre || !formData.banco || formData.cupoTotal <= 0) {
@@ -71,21 +75,71 @@ export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDial
     }
 
     if (mode === "create") {
-      addTarjetaCredito(formData)
-      toast({
-        title: "Tarjeta creada",
-        description: "La tarjeta de crédito se ha registrado exitosamente",
+      setIsSubmitting(true)
+      const result = await createTarjeta({
+        nombre: formData.nombre.trim(),
+        banco: formData.banco.trim(),
+        cupoTotal: Number(formData.cupoTotal),
+        cupoDisponible: Number(formData.cupoDisponible),
+        fechaFacturacion: Number(formData.fechaFacturacion),
+        fechaPago: Number(formData.fechaPago),
+        tasaInteresMensual: Number(formData.tasaInteresMensual),
+        deudaActual: Number(formData.deudaActual) || 0,
+        deudaFacturada: Number(formData.deudaFacturada) || 0,
+        deudaNoFacturada: Number(formData.deudaNoFacturada) || 0,
       })
-    } else {
-      updateTarjetaCredito(tarjeta!.id, formData)
+      setIsSubmitting(false)
+
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Tarjeta creada",
+          description: "La tarjeta de crédito se ha registrado exitosamente",
+        })
+        onOpenChange(false)
+        resetForm()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await updateTarjetaAction(tarjeta!.id, {
+      nombre: formData.nombre.trim(),
+      banco: formData.banco.trim(),
+      cupoTotal: Number(formData.cupoTotal),
+      cupoDisponible: Number(formData.cupoDisponible),
+      fechaFacturacion: Number(formData.fechaFacturacion),
+      fechaPago: Number(formData.fechaPago),
+      tasaInteresMensual: Number(formData.tasaInteresMensual),
+      deudaActual: Number(formData.deudaActual) || 0,
+      deudaFacturada: Number(formData.deudaFacturada) || 0,
+      deudaNoFacturada: Number(formData.deudaNoFacturada) || 0,
+    })
+    setIsSubmitting(false)
+
+    if (result.success) {
+      await refreshData()
+      router.refresh()
       toast({
         title: "Tarjeta actualizada",
         description: "Los cambios se han guardado correctamente",
       })
+      onOpenChange(false)
+      resetForm()
+    } else {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
-
-    onOpenChange(false)
-    resetForm()
   }
 
   const resetForm = () => {
@@ -239,10 +293,12 @@ export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDial
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">{mode === "create" ? "Crear Tarjeta" : "Guardar Cambios"}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {mode === "create" ? (isSubmitting ? "Guardando..." : "Crear Tarjeta") : "Guardar Cambios"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

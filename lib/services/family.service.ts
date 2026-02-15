@@ -199,6 +199,8 @@ export async function deleteFamilyGroup(userId: string, groupId: string): Promis
   if (!group) return { success: false, error: "Grupo no encontrado" }
   if (group.propietarioId !== userId) return { success: false, error: "Solo el propietario puede eliminar el grupo" }
 
+  // Eliminar miembros primero para evitar errores de referencia
+  await prisma.familyGroupMember.deleteMany({ where: { grupoId: groupId } })
   await prisma.familyGroup.delete({ where: { id: groupId } })
   return { success: true }
 }

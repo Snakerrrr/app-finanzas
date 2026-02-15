@@ -33,9 +33,13 @@ export async function joinFamilyGroup(codigo: string) {
 export async function deleteFamilyGroup(groupId: string) {
   const session = await auth()
   if (!session?.user?.id) return { success: false, error: "No autenticado" }
-  const result = await familyService.deleteFamilyGroup(session.user.id, groupId)
-  if (result.success) revalidatePath("/familia")
-  return result
+  try {
+    const result = await familyService.deleteFamilyGroup(session.user.id, groupId)
+    if (result.success) revalidatePath("/familia")
+    return result
+  } catch {
+    return { success: false, error: "Error al eliminar grupo" }
+  }
 }
 
 export async function leaveFamilyGroup(groupId: string) {

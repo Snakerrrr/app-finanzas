@@ -3,7 +3,6 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,9 +29,8 @@ interface MovimientoDialogProps {
 }
 
 export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: MovimientoDialogProps) {
-  const { refreshData, categorias, cuentas, tarjetasCredito } = useData()
+  const { refreshData, categorias, cuentas, tarjetasCredito, updateMovimiento: updateMovLocal } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isQuickMode, setIsQuickMode] = useState(mode === "create")
 
@@ -104,14 +102,14 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
       const result = await createMovimiento(movimientoData)
       setIsSubmitting(false)
       if (result.success) {
-        await refreshData()
-        router.refresh()
         toast({
           title: "Movimiento creado",
           description: "El movimiento se ha registrado exitosamente",
         })
         onOpenChange(false)
         resetForm()
+        // Refresh para obtener el movimiento con ID real del servidor
+        refreshData().catch(() => {})
       } else {
         toast({
           title: "Error",
@@ -122,8 +120,7 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
       return
     }
 
-    setIsSubmitting(true)
-    const result = await updateMovimientoAction(movimiento!.id, {
+    const updatePayload = {
       fecha: movimientoData.fecha,
       descripcion: movimientoData.descripcion,
       tipoMovimiento: movimientoData.tipoMovimiento,
@@ -139,18 +136,23 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
       cuentaOrigenId: movimientoData.cuentaOrigenId || null,
       cuentaDestinoId: movimientoData.cuentaDestinoId || null,
       tarjetaCreditoId: movimientoData.tarjetaCreditoId || null,
-    })
+    }
+
+    setIsSubmitting(true)
+    const result = await updateMovimientoAction(movimiento!.id, updatePayload)
     setIsSubmitting(false)
 
     if (result.success) {
-      await refreshData()
-      router.refresh()
+      // Optimista: actualizar estado local inmediatamente
+      updateMovLocal(movimiento!.id, updatePayload)
       toast({
         title: "Movimiento actualizado",
         description: "Los cambios se han guardado correctamente",
       })
       onOpenChange(false)
       resetForm()
+      // Sync en background
+      refreshData().catch(() => {})
     } else {
       toast({
         title: "Error",

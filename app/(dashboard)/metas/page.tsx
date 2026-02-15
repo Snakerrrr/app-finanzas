@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +11,7 @@ import { formatCLP, calculateAporteMensualSugerido } from "@/lib/utils-finance"
 import { Target, TrendingUp, Calendar, Plus, Pencil, Trash2 } from "lucide-react"
 import { MetaDialog } from "@/components/meta-dialog"
 import { AporteMetaDialog } from "@/components/aporte-meta-dialog"
+import { deleteMetaAhorro as deleteMetaAction } from "@/app/actions/finance"
 import type { MetaAhorro } from "@/lib/types"
 import {
   AlertDialog,
@@ -24,8 +26,9 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function MetasPage() {
-  const { metasAhorro, cuentas, deleteMetaAhorro } = useData()
+  const { metasAhorro, cuentas, refreshData } = useData()
   const { toast } = useToast()
+  const router = useRouter()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -62,13 +65,23 @@ export default function MetasPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (metaToDelete) {
-      deleteMetaAhorro(metaToDelete)
-      toast({
-        title: "Meta eliminada",
-        description: "La meta de ahorro se ha eliminado correctamente",
-      })
+      const result = await deleteMetaAction(metaToDelete)
+      if (result.success) {
+        await refreshData()
+        router.refresh()
+        toast({
+          title: "Meta eliminada",
+          description: "La meta de ahorro se ha eliminado correctamente",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        })
+      }
       setMetaToDelete(null)
     }
     setDeleteDialogOpen(false)

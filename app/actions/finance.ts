@@ -428,3 +428,93 @@ export async function deleteMetaAhorro(id: string): Promise<DeleteMetaAhorroResu
   revalidatePath("/metas")
   return { success: true }
 }
+
+// Aporte a meta (incrementar acumuladoCLP)
+export type AporteMetaResult = { success: true } | { success: false; error: string }
+
+export async function aportarMeta(id: string, monto: number): Promise<AporteMetaResult> {
+  const session = await auth()
+  if (!session?.user?.id) return { success: false, error: "No autorizado" }
+  if (monto <= 0) return { success: false, error: "El monto debe ser mayor a 0" }
+  const result = await financeService.aportarMeta(session.user.id, id, monto)
+  if (!result.success) return result
+  revalidatePath("/")
+  revalidatePath("/metas")
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// Tarjetas de Crédito (validación + servicio + revalidate)
+// ---------------------------------------------------------------------------
+
+const createTarjetaCreditoSchema = z.object({
+  nombre: z.string().min(1).max(120),
+  banco: z.string().min(1).max(120),
+  cupoTotal: z.number().positive(),
+  cupoDisponible: z.number().min(0),
+  fechaFacturacion: z.number().int().min(1).max(31),
+  fechaPago: z.number().int().min(1).max(31),
+  tasaInteresMensual: z.number().min(0),
+  deudaActual: z.number().min(0).default(0),
+  deudaFacturada: z.number().min(0).default(0),
+  deudaNoFacturada: z.number().min(0).default(0),
+})
+
+export type CreateTarjetaResult = { success: true; id: string } | { success: false; error: string }
+
+export async function createTarjeta(data: unknown): Promise<CreateTarjetaResult> {
+  const session = await auth()
+  if (!session?.user?.id) return { success: false, error: "No autorizado" }
+  const parsed = createTarjetaCreditoSchema.safeParse(data)
+  if (!parsed.success) {
+    const first = Object.values(parsed.error.flatten().fieldErrors).flat()[0]
+    return { success: false, error: first ?? "Datos inválidos" }
+  }
+  const result = await financeService.createTarjetaCredito(session.user.id, parsed.data)
+  if (!result.success) return result
+  revalidatePath("/")
+  revalidatePath("/tarjetas")
+  return { success: true, id: result.id! }
+}
+
+const updateTarjetaCreditoSchema = z.object({
+  nombre: z.string().min(1).max(120).optional(),
+  banco: z.string().min(1).max(120).optional(),
+  cupoTotal: z.number().positive().optional(),
+  cupoDisponible: z.number().min(0).optional(),
+  fechaFacturacion: z.number().int().min(1).max(31).optional(),
+  fechaPago: z.number().int().min(1).max(31).optional(),
+  tasaInteresMensual: z.number().min(0).optional(),
+  deudaActual: z.number().min(0).optional(),
+  deudaFacturada: z.number().min(0).optional(),
+  deudaNoFacturada: z.number().min(0).optional(),
+})
+
+export type UpdateTarjetaResult = { success: true } | { success: false; error: string }
+
+export async function updateTarjeta(id: string, data: unknown): Promise<UpdateTarjetaResult> {
+  const session = await auth()
+  if (!session?.user?.id) return { success: false, error: "No autorizado" }
+  const parsed = updateTarjetaCreditoSchema.safeParse(data)
+  if (!parsed.success) {
+    const first = Object.values(parsed.error.flatten().fieldErrors).flat()[0]
+    return { success: false, error: first ?? "Datos inválidos" }
+  }
+  const result = await financeService.updateTarjetaCredito(session.user.id, id, parsed.data)
+  if (!result.success) return result
+  revalidatePath("/")
+  revalidatePath("/tarjetas")
+  return { success: true }
+}
+
+export type DeleteTarjetaResult = { success: true } | { success: false; error: string }
+
+export async function deleteTarjeta(id: string): Promise<DeleteTarjetaResult> {
+  const session = await auth()
+  if (!session?.user?.id) return { success: false, error: "No autorizado" }
+  const result = await financeService.deleteTarjetaCredito(session.user.id, id)
+  if (!result.success) return result
+  revalidatePath("/")
+  revalidatePath("/tarjetas")
+  return { success: true }
+}

@@ -57,7 +57,7 @@ export function RecurrentForm({
   const [frecuencia, setFrecuencia] = useState(editItem?.frecuencia ?? "mensual")
   const [diaMes, setDiaMes] = useState(editItem?.diaMes?.toString() ?? "")
   const [categoriaId, setCategoriaId] = useState(editItem?.categoriaId ?? "")
-  const [cuentaOrigenId, setCuentaOrigenId] = useState(editItem?.cuentaOrigenId ?? "")
+  const [cuentaOrigenId, setCuentaOrigenId] = useState(editItem?.cuentaOrigenId ?? "none")
   const [activo, setActivo] = useState(editItem?.activo ?? true)
   const [autoCrear, setAutoCrear] = useState(editItem?.autoCrear ?? false)
   const [proximaFecha, setProximaFecha] = useState(
@@ -72,7 +72,7 @@ export function RecurrentForm({
       frecuencia,
       diaMes: frecuencia === "mensual" && diaMes ? parseInt(diaMes) : null,
       categoriaId,
-      cuentaOrigenId: cuentaOrigenId || null,
+      cuentaOrigenId: cuentaOrigenId === "none" ? null : cuentaOrigenId || null,
       activo,
       autoCrear,
       proximaFecha,
@@ -176,7 +176,7 @@ export function RecurrentForm({
                 <SelectValue placeholder="Sin cuenta específica" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Sin cuenta</SelectItem>
+                <SelectItem value="none">Sin cuenta</SelectItem>
                 {cuentas.filter((c) => c.activo).map((cuenta) => (
                   <SelectItem key={cuenta.id} value={cuenta.id}>
                     {cuenta.nombre} - {cuenta.banco}

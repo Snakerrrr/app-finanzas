@@ -1,20 +1,27 @@
+"use client"
+
 import type { ReactNode } from "react"
+import { AppSidebar } from "@/components/app-sidebar"
+import { TopBar } from "@/components/top-bar"
+import { ProtectedRoute } from "@/components/protected-route"
+import { DataProvider } from "@/lib/data-context"
 import { FloatingActionButton } from "@/components/floating-action-button"
 import { OnboardingWrapper } from "@/components/onboarding/onboarding-wrapper"
 
-/**
- * Layout del grupo de rutas (dashboard). No añade segmento a la URL.
- * loading.tsx en este nivel se muestra al navegar entre páginas hermanas.
- * Incluye el FAB (Floating Action Button) para agregar transacciones rápidamente.
- * Incluye el Onboarding interactivo para nuevos usuarios.
- */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <>
-      <OnboardingWrapper />
-      {children}
-      {/* FAB Global para agregar transacciones */}
-      <FloatingActionButton />
-    </>
+    <ProtectedRoute>
+      <DataProvider>
+        <AppSidebar />
+        <div className="ml-64">
+          <TopBar />
+          <main className="mt-16 p-6">
+            <OnboardingWrapper />
+            {children}
+            <FloatingActionButton />
+          </main>
+        </div>
+      </DataProvider>
+    </ProtectedRoute>
   )
 }

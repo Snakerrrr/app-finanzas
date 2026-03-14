@@ -1,31 +1,23 @@
-import { Suspense } from "react"
-import { redirect } from "next/navigation"
-import { auth } from "@/auth"
+"use client"
+
+import { useState, useEffect } from "react"
+import { useData } from "@/lib/data-context"
 import { getRecurringTransactions } from "@/app/actions/recurring"
-import { getDashboardData } from "@/app/actions/finance"
 import { RecurrentesClient } from "@/components/recurrentes/recurrentes-client"
-
-async function RecurrentesContent() {
-  const session = await auth()
-  if (!session?.user?.id) redirect("/login")
-
-  const [recurrentes, dashboardData] = await Promise.all([
-    getRecurringTransactions(),
-    getDashboardData(),
-  ])
-
-  if (!dashboardData) redirect("/login")
-
-  return (
-    <RecurrentesClient
-      recurrentes={recurrentes}
-      categorias={dashboardData.categorias}
-      cuentas={dashboardData.cuentas}
-    />
-  )
-}
+import type { RecurringForClient } from "@/lib/services/recurring.service"
 
 export default function RecurrentesPage() {
+  const { categorias, cuentas } = useData()
+  const [recurrentes, setRecurrentes] = useState<RecurringForClient[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    getRecurringTransactions().then((data) => {
+      setRecurrentes(data)
+      setLoaded(true)
+    })
+  }, [])
+
   return (
     <div className="space-y-6">
       <div>
@@ -33,17 +25,19 @@ export default function RecurrentesPage() {
         <p className="text-muted-foreground">Gestiona tus gastos que se repiten periódicamente</p>
       </div>
 
-      <Suspense
-        fallback={
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 animate-pulse rounded-lg bg-muted/60" />
-            ))}
-          </div>
-        }
-      >
-        <RecurrentesContent />
-      </Suspense>
+      {!loaded ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-lg bg-muted/60" />
+          ))}
+        </div>
+      ) : (
+        <RecurrentesClient
+          recurrentes={recurrentes}
+          categorias={categorias}
+          cuentas={cuentas}
+        />
+      )}
     </div>
   )
 }

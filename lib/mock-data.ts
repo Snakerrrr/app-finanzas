@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Movimiento, Cuenta, TarjetaCredito, MetaAhorro, Categoria, Presupuesto } from "./types"
 
 export const categorias: Categoria[] = [

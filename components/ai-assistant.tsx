@@ -6,6 +6,7 @@ import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import type { UIMessage } from "ai"
 import { useChatStore } from "@/lib/stores/chat-store"
+import { trackChatMessage } from "@/lib/analytics"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,8 +55,6 @@ export function AiAssistant() {
   const { messages: storedMessages, setMessages: setStoredMessages, clearMessages, _hasHydrated } = useChatStore()
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
-    // Empezar vacío - se restaurarán después de la hidratación
-    initialMessages: [],
     onError: (err) => {
       console.error("Error en el chat:", err)
     },
@@ -95,6 +94,7 @@ export function AiAssistant() {
     const trimmed = text.trim()
     if (!trimmed || isLoading) return
     setInput("")
+    trackChatMessage({ messageLength: trimmed.length, conversationLength: messages.length })
     sendMessage({ text: trimmed })
   }
 

@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,7 +29,6 @@ interface MetaDialogProps {
 export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) {
   const { refreshData, cuentas } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -83,7 +81,6 @@ export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) 
 
       if (result.success) {
         await refreshData()
-        router.refresh()
         toast({
           title: "Meta creada",
           description: "La meta de ahorro se ha registrado exitosamente",
@@ -113,7 +110,6 @@ export function MetaDialog({ open, onOpenChange, meta, mode }: MetaDialogProps) 
 
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Meta actualizada",
         description: "Los cambios se han guardado correctamente",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -57,30 +57,32 @@ export default function MovimientosPage() {
     setSearchTerm("")
   }
 
-  const movimientosFiltrados = movimientos
-    .filter((mov) => {
-      // Filtro de búsqueda por texto
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase()
-        const catNombre = categorias.find((c) => c.id === mov.categoriaId)?.nombre?.toLowerCase() ?? ""
-        if (
-          !mov.descripcion.toLowerCase().includes(term) &&
-          !catNombre.includes(term) &&
-          !mov.notas?.toLowerCase().includes(term)
-        ) {
-          return false
+  const movimientosFiltrados = useMemo(() => {
+    return movimientos
+      .filter((mov) => {
+        // Filtro de búsqueda por texto
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase()
+          const catNombre = categorias.find((c) => c.id === mov.categoriaId)?.nombre?.toLowerCase() ?? ""
+          if (
+            !mov.descripcion.toLowerCase().includes(term) &&
+            !catNombre.includes(term) &&
+            !mov.notas?.toLowerCase().includes(term)
+          ) {
+            return false
+          }
         }
-      }
-      // Filtro por tipo
-      if (filterTipo !== "todos" && mov.tipoMovimiento !== filterTipo) return false
-      // Filtro por categoría
-      if (filterCategoria !== "todas" && mov.categoriaId !== filterCategoria) return false
-      // Filtro por rango de fechas
-      if (filterFechaDesde && mov.fecha < filterFechaDesde) return false
-      if (filterFechaHasta && mov.fecha > filterFechaHasta) return false
-      return true
-    })
-    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+        // Filtro por tipo
+        if (filterTipo !== "todos" && mov.tipoMovimiento !== filterTipo) return false
+        // Filtro por categoría
+        if (filterCategoria !== "todas" && mov.categoriaId !== filterCategoria) return false
+        // Filtro por rango de fechas
+        if (filterFechaDesde && mov.fecha < filterFechaDesde) return false
+        if (filterFechaHasta && mov.fecha > filterFechaHasta) return false
+        return true
+      })
+      .sort((a, b) => b.fecha.localeCompare(a.fecha))
+  }, [movimientos, categorias, searchTerm, filterTipo, filterCategoria, filterFechaDesde, filterFechaHasta])
 
   const handleAdd = () => {
     setDialogMode("create")

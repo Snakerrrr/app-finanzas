@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,7 +29,6 @@ interface CategoriaDialogProps {
 export function CategoriaDialog({ open, onOpenChange, categoria, mode }: CategoriaDialogProps) {
   const { refreshData } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -75,7 +73,6 @@ export function CategoriaDialog({ open, onOpenChange, categoria, mode }: Categor
 
       if (result.success) {
         await refreshData()
-        router.refresh()
         toast({
           title: "Categoría creada",
           description: "La categoría se ha guardado en la base de datos",
@@ -103,7 +100,6 @@ export function CategoriaDialog({ open, onOpenChange, categoria, mode }: Categor
 
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Categoría actualizada",
         description: "Los cambios se han guardado correctamente",

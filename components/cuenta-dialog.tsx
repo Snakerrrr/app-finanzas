@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,7 +29,6 @@ interface CuentaDialogProps {
 export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogProps) {
   const { refreshData } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -47,7 +45,7 @@ export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogP
         nombre: cuenta.nombre,
         banco: cuenta.banco,
         saldoInicialMes: cuenta.saldoInicialMes,
-        saldoFinalMesDeclarado: cuenta.saldoFinalMesDeclarado,
+        saldoFinalMesDeclarado: cuenta.saldoFinalMesDeclarado ?? undefined,
         activo: cuenta.activo,
       })
     }
@@ -76,7 +74,6 @@ export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogP
 
       if (result.success) {
         await refreshData()
-        router.refresh()
         toast({
           title: "Cuenta creada",
           description: "La cuenta se ha guardado en la base de datos",
@@ -105,7 +102,6 @@ export function CuentaDialog({ open, onOpenChange, cuenta, mode }: CuentaDialogP
 
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Cuenta actualizada",
         description: "Los cambios se han guardado correctamente",

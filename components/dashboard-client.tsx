@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { KPICard } from "@/components/kpi-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -95,13 +95,18 @@ export function DashboardKPISection({
 
   // Calcular presupuestos cumplidos para el score de salud financiera
   const mesActual = getCurrentMonth()
-  const presupuestosMes = presupuestos.filter((p) => p.mes === mesActual)
-  const presupuestosCumplidos = presupuestosMes.filter((p) => {
-    const gastosCategoria = movimientosMes
-      .filter((m) => m.categoriaId === p.categoriaId && m.tipoMovimiento === "Gasto")
-      .reduce((sum, m) => sum + m.montoCLP, 0)
-    return gastosCategoria <= p.montoPresupuestadoCLP
-  }).length
+  const presupuestosMes = useMemo(
+    () => presupuestos.filter((p) => p.mes === mesActual),
+    [presupuestos, mesActual]
+  )
+  const presupuestosCumplidos = useMemo(() => {
+    return presupuestosMes.filter((p) => {
+      const gastosCategoria = movimientosMes
+        .filter((m) => m.categoriaId === p.categoriaId && m.tipoMovimiento === "Gasto")
+        .reduce((sum, m) => sum + m.montoCLP, 0)
+      return gastosCategoria <= p.montoPresupuestadoCLP
+    }).length
+  }, [presupuestosMes, movimientosMes])
 
   // Calcular proyección de balance
   const proyeccion = calculateProjectedBalance({
@@ -186,29 +191,35 @@ export function DashboardChartsSection({
 }: DashboardClientProps & { isCompact?: boolean }) {
   const { movimientosMes, categorias, monthlyStats, categoryStats } = initialData
   const mesActual = getCurrentMonth()
-  const dailyFlow = getDailyFlow(movimientosMes, mesActual)
-  const gastosPorTipo = calculateGastosByTipo(movimientosMes)
-  const dataTipoGasto = Object.entries(gastosPorTipo).map(([tipo, monto]) => ({ tipo, monto }))
+  const dailyFlow = useMemo(() => getDailyFlow(movimientosMes, mesActual), [movimientosMes, mesActual])
+  const gastosPorTipo = useMemo(() => calculateGastosByTipo(movimientosMes), [movimientosMes])
+  const dataTipoGasto = useMemo(
+    () => Object.entries(gastosPorTipo).map(([tipo, monto]) => ({ tipo, monto })),
+    [gastosPorTipo]
+  )
   const COLORS_TIPO = { Fijo: "#ef4444", Variable: "#f59e0b", Ocasional: "#8b5cf6" }
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedTipo, setSelectedTipo] = useState<string | null>(null)
 
   // Filtrar movimientos por categoría o tipo seleccionado
-  const filteredMovimientos = movimientosMes.filter((m) => {
-    if (selectedCategory) {
-      const cat = categorias.find((c) => c.id === m.categoriaId)
-      return cat?.nombre === selectedCategory
-    }
-    if (selectedTipo) {
-      return m.tipoGasto === selectedTipo
-    }
-    return true
-  })
+  const filteredMovimientos = useMemo(() => {
+    return movimientosMes.filter((m) => {
+      if (selectedCategory) {
+        const cat = categorias.find((c) => c.id === m.categoriaId)
+        return cat?.nombre === selectedCategory
+      }
+      if (selectedTipo) {
+        return m.tipoGasto === selectedTipo
+      }
+      return true
+    })
+  }, [movimientosMes, categorias, selectedCategory, selectedTipo])
 
-  const filteredTotal = filteredMovimientos
-    .filter((m) => m.tipoMovimiento === "Gasto")
-    .reduce((s, m) => s + m.montoCLP, 0)
+  const filteredTotal = useMemo(
+    () => filteredMovimientos.filter((m) => m.tipoMovimiento === "Gasto").reduce((s, m) => s + m.montoCLP, 0),
+    [filteredMovimientos]
+  )
 
   // No renderizar en modo compacto
   if (isCompact) return null
@@ -409,7 +420,10 @@ export function DashboardRecentSection({
   isCompact = false,
 }: DashboardClientProps & { isCompact?: boolean }) {
   const { movimientosMes, categorias } = initialData
-  const ultimosMovimientos = [...movimientosMes].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 8)
+  const ultimosMovimientos = useMemo(
+    () => [...movimientosMes].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 8),
+    [movimientosMes]
+  )
 
   // No renderizar en modo compacto
   if (isCompact) return null

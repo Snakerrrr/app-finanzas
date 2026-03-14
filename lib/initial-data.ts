@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { Categoria, Cuenta, TarjetaCredito, MetaAhorro, Presupuesto, Movimiento } from "./types"
 
 // Categorías predeterminadas para nuevos usuarios

@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,7 +29,6 @@ interface PresupuestoDialogProps {
 export function PresupuestoDialog({ open, onOpenChange, presupuesto, mode }: PresupuestoDialogProps) {
   const { updatePresupuesto, refreshData, categorias } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -72,7 +70,6 @@ export function PresupuestoDialog({ open, onOpenChange, presupuesto, mode }: Pre
 
       if (result.success) {
         await refreshData()
-        router.refresh()
         toast({
           title: "Presupuesto creado",
           description: "El presupuesto se ha guardado en la base de datos",

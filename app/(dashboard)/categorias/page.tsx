@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,7 +25,6 @@ import { useToast } from "@/hooks/use-toast"
 export default function CategoriasPage() {
   const { categorias, cuentas, refreshData } = useData()
   const { toast } = useToast()
-  const router = useRouter()
 
   // Estados para Categorías
   const [catDialogOpen, setCatDialogOpen] = useState(false)
@@ -70,7 +68,6 @@ export default function CategoriasPage() {
     setCategoriaToDelete(null)
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Categoría eliminada",
         description: "La categoría se ha eliminado correctamente",
@@ -112,7 +109,6 @@ export default function CategoriasPage() {
     setCuentaToDelete(null)
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Cuenta eliminada",
         description: "La cuenta se ha eliminado correctamente",

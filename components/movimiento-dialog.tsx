@@ -57,18 +57,18 @@ export function MovimientoDialog({ open, onOpenChange, movimiento, mode }: Movim
       setFormData({
         fecha: movimiento.fecha,
         descripcion: movimiento.descripcion,
-        tipoMovimiento: movimiento.tipoMovimiento,
+        tipoMovimiento: movimiento.tipoMovimiento as TipoMovimiento,
         categoriaId: movimiento.categoriaId,
         subcategoria: movimiento.subcategoria || "",
-        tipoGasto: movimiento.tipoGasto || "Variable",
+        tipoGasto: (movimiento.tipoGasto || "Variable") as TipoGasto,
         cuentaOrigenId: movimiento.cuentaOrigenId || "",
         cuentaDestinoId: movimiento.cuentaDestinoId || "",
         tarjetaCreditoId: movimiento.tarjetaCreditoId || "",
-        metodoPago: movimiento.metodoPago,
+        metodoPago: movimiento.metodoPago as MetodoPago,
         montoCLP: movimiento.montoCLP,
         cuotas: movimiento.cuotas || 1,
         notas: movimiento.notas || "",
-        estadoConciliacion: movimiento.estadoConciliacion,
+        estadoConciliacion: movimiento.estadoConciliacion as "Pendiente" | "Conciliado",
         mesConciliacion: movimiento.mesConciliacion,
       })
     }

@@ -590,7 +590,7 @@ ORDER BY indexname;
 ```env
 # Reemplazar DATABASE_URL con:
 DATABASE_URL="prisma://accelerate.prisma-data.net/?api_key=YOUR_API_KEY"
-DIRECT_URL="postgresql://postgres.dwqrytdzbfodddvqsxfw:*Barcelonafc123@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
+DIRECT_URL="postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
 ```
 
 4. Actualizar `lib/db.ts`:
@@ -625,10 +625,10 @@ Supabase ya incluye PgBouncer en el puerto 6543. Solo necesitas ajustar la confi
 **Archivo:** `.env` (MODIFICAR)
 ```env
 # URL con PgBouncer (connection pooling)
-DATABASE_URL="postgresql://postgres.dwqrytdzbfodddvqsxfw:*Barcelonafc123@aws-1-us-east-2.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=5&pool_timeout=10"
+DATABASE_URL="postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=5&pool_timeout=10"
 
 # URL directa (para migraciones)
-DIRECT_URL="postgresql://postgres.dwqrytdzbfodddvqsxfw:*Barcelonafc123@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
+DIRECT_URL="postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
 ```
 
 **Archivo:** `prisma/schema.prisma:8-12` (MODIFICAR)

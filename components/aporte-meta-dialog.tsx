@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -28,7 +27,6 @@ interface AporteMetaDialogProps {
 export function AporteMetaDialog({ open, onOpenChange, metaId, metaNombre }: AporteMetaDialogProps) {
   const { refreshData } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [monto, setMonto] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -50,7 +48,6 @@ export function AporteMetaDialog({ open, onOpenChange, metaId, metaNombre }: Apo
 
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Aporte registrado",
         description: `Se ha agregado ${monto.toLocaleString("es-CL")} CLP a ${metaNombre}`,

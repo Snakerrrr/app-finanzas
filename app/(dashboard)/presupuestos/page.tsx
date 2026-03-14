@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useData } from "@/lib/data-context"
+import { deletePresupuesto as deletePresupuestoAction } from "@/app/actions/finance"
 import { formatCLP, getCurrentMonth, calculatePresupuestoUsage } from "@/lib/utils-finance"
 import { AlertTriangle, Plus, Pencil, Trash2 } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
@@ -24,10 +25,13 @@ import {
 import { useToast } from "@/hooks/use-toast"
 
 export default function PresupuestosPage() {
-  const { movimientos, categorias, presupuestos, deletePresupuesto } = useData()
+  const { movimientos, categorias, presupuestos, refreshData, deletePresupuesto } = useData()
   const { toast } = useToast()
   const mesActual = getCurrentMonth()
-  const presupuestoUsage = calculatePresupuestoUsage(movimientos, presupuestos, mesActual)
+  const presupuestoUsage = useMemo(
+    () => calculatePresupuestoUsage(movimientos, presupuestos, mesActual),
+    [movimientos, presupuestos, mesActual]
+  )
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -39,14 +43,18 @@ export default function PresupuestosPage() {
   const totalGastado = presupuestoUsage.reduce((sum, p) => sum + p.gastado, 0)
   const porcentajeTotal = totalPresupuestado > 0 ? (totalGastado / totalPresupuestado) * 100 : 0
 
-  const dataGrafico = presupuestoUsage.map((p) => {
-    const categoria = categorias.find((c) => c.id === p.categoriaId)
-    return {
-      categoria: categoria?.nombre || "Desconocido",
-      presupuestado: p.presupuestado,
-      gastado: p.gastado,
-    }
-  })
+  const dataGrafico = useMemo(
+    () =>
+      presupuestoUsage.map((p) => {
+        const categoria = categorias.find((c) => c.id === p.categoriaId)
+        return {
+          categoria: categoria?.nombre || "Desconocido",
+          presupuestado: p.presupuestado,
+          gastado: p.gastado,
+        }
+      }),
+    [presupuestoUsage, categorias]
+  )
 
   const handleAdd = () => {
     setDialogMode("create")
@@ -65,16 +73,30 @@ export default function PresupuestosPage() {
     setDeleteDialogOpen(true)
   }
 
-  const handleDeleteConfirm = () => {
-    if (presupuestoToDelete) {
-      deletePresupuesto(presupuestoToDelete)
-      toast({
-        title: "Presupuesto eliminado",
-        description: "El presupuesto se ha eliminado correctamente",
-      })
-      setPresupuestoToDelete(null)
+  const handleDeleteConfirm = async () => {
+    if (!presupuestoToDelete) {
+      setDeleteDialogOpen(false)
+      return
     }
+    const idToDelete = presupuestoToDelete
+    // Optimistic: remove from UI immediately
+    deletePresupuesto(idToDelete)
     setDeleteDialogOpen(false)
+    setPresupuestoToDelete(null)
+    toast({
+      title: "Presupuesto eliminado",
+      description: "El presupuesto se ha eliminado correctamente",
+    })
+    // Persist on server in background
+    const result = await deletePresupuestoAction(idToDelete)
+    if (!result.success) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: result.error,
+      })
+      await refreshData()
+    }
   }
 
   return (

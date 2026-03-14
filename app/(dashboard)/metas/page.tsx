@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -28,7 +27,6 @@ import { useToast } from "@/hooks/use-toast"
 export default function MetasPage() {
   const { metasAhorro, cuentas, refreshData } = useData()
   const { toast } = useToast()
-  const router = useRouter()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
@@ -70,7 +68,6 @@ export default function MetasPage() {
       const result = await deleteMetaAction(metaToDelete)
       if (result.success) {
         await refreshData()
-        router.refresh()
         toast({
           title: "Meta eliminada",
           description: "La meta de ahorro se ha eliminado correctamente",

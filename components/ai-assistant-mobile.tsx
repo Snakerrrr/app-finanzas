@@ -57,8 +57,6 @@ export function AiAssistantMobile() {
   const { messages: storedMessages, setMessages: setStoredMessages, clearMessages, _hasHydrated } = useChatStore()
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
-    // Empezar vacío - se restaurarán después de la hidratación
-    initialMessages: [],
     onError: (err) => {
       console.error("Error en el chat:", err)
     },

@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,7 +28,6 @@ interface TarjetaDialogProps {
 export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDialogProps) {
   const { refreshData } = useData()
   const { toast } = useToast()
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -92,7 +90,6 @@ export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDial
 
       if (result.success) {
         await refreshData()
-        router.refresh()
         toast({
           title: "Tarjeta creada",
           description: "La tarjeta de crédito se ha registrado exitosamente",
@@ -126,7 +123,6 @@ export function TarjetaDialog({ open, onOpenChange, tarjeta, mode }: TarjetaDial
 
     if (result.success) {
       await refreshData()
-      router.refresh()
       toast({
         title: "Tarjeta actualizada",
         description: "Los cambios se han guardado correctamente",

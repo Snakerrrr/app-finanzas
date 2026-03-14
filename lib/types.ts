@@ -7,22 +7,26 @@ export type TipoCategoria = "Gasto" | "Ingreso" | "Ambos"
 
 export interface Movimiento {
   id: string
-  fecha: string // YYYY-MM-DD
+  fecha: string
   descripcion: string
-  tipoMovimiento: TipoMovimiento
+  tipoMovimiento: string
   categoriaId: string
-  subcategoria?: string
-  tipoGasto?: TipoGasto
-  cuentaOrigenId?: string
-  cuentaDestinoId?: string
-  tarjetaCreditoId?: string
-  metodoPago: MetodoPago
+  subcategoria: string | null
+  tipoGasto: string | null
+  metodoPago: string
   montoCLP: number
-  cuotas?: number
-  etiquetas?: string[]
-  notas?: string
-  estadoConciliacion: EstadoConciliacion
-  mesConciliacion: string // YYYY-MM
+  cuotas: number | null
+  etiquetas: string[]
+  notas: string | null
+  estadoConciliacion: string
+  mesConciliacion: string
+  cuentaOrigenId: string | null
+  cuentaDestinoId: string | null
+  tarjetaCreditoId: string | null
+  recurrenteId?: string | null
+  categoria?: { id: string; nombre: string; tipo: string; color: string; icono: string }
+  cuentaOrigen?: { id: string; nombre: string; banco: string } | null
+  cuentaDestino?: { id: string; nombre: string; banco: string } | null
 }
 
 export interface Cuenta {
@@ -30,7 +34,7 @@ export interface Cuenta {
   nombre: string
   banco: string
   saldoInicialMes: number
-  saldoFinalMesDeclarado?: number
+  saldoFinalMesDeclarado: number | null
   saldoCalculado: number
   activo: boolean
 }
@@ -41,8 +45,8 @@ export interface TarjetaCredito {
   banco: string
   cupoTotal: number
   cupoDisponible: number
-  fechaFacturacion: number // día del mes
-  fechaPago: number // día del mes
+  fechaFacturacion: number
+  fechaPago: number
   tasaInteresMensual: number
   deudaActual: number
   deudaFacturada: number
@@ -53,7 +57,7 @@ export interface MetaAhorro {
   id: string
   nombre: string
   objetivoCLP: number
-  fechaObjetivo: string // YYYY-MM-DD
+  fechaObjetivo: string
   aporteMensualSugerido: number
   acumuladoCLP: number
   cuentaDestinoId: string
@@ -71,7 +75,7 @@ export interface Categoria {
 export interface Presupuesto {
   id: string
   categoriaId: string
-  mes: string // YYYY-MM
+  mes: string
   montoPresupuestadoCLP: number
 }
 

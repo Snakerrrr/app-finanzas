@@ -5,6 +5,8 @@ import { useTheme } from "./theme-provider"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "./ui/button"
 import { useRouter } from "next/navigation"
+import { useSidebar } from "@/lib/sidebar-context"
+import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +20,7 @@ export function TopBar() {
   const { theme, setTheme } = useTheme()
   const { user, logout } = useAuth()
   const router = useRouter()
+  const { collapsed } = useSidebar()
 
   const handleLogout = async () => {
     await logout()
@@ -25,7 +28,12 @@ export function TopBar() {
   }
 
   return (
-    <header className="fixed left-64 right-0 top-0 z-10 h-16 border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-sm">
+    <header
+      className={cn(
+        "fixed right-0 top-0 z-10 h-16 border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-sm transition-all duration-300 ease-in-out",
+        collapsed ? "left-[68px]" : "left-64"
+      )}
+    >
       <div className="flex h-full items-center justify-between px-6">
         <div className="flex items-center gap-3">
           <div className="text-sm">

@@ -130,7 +130,7 @@ export type CreateMovimientoInput = {
 /** Alias para firma tipo createMovimientoService(userId, data: MovimientoCreateInput) */
 export type MovimientoCreateInput = CreateMovimientoInput
 
-export type UpdateMovimientoInput = Partial<CreateMovimientoInput> & {
+export type UpdateMovimientoInput = Partial<Omit<CreateMovimientoInput, "subcategoria" | "tipoGasto" | "cuotas" | "notas" | "cuentaOrigenId" | "cuentaDestinoId" | "tarjetaCreditoId">> & {
   subcategoria?: string | null
   tipoGasto?: "Fijo" | "Variable" | "Ocasional" | null
   cuotas?: number | null
@@ -734,16 +734,18 @@ export async function updateCuenta(
 export async function deleteCuenta(userId: string, id: string): Promise<Result<ResultOk>> {
   const cuenta = await prisma.cuenta.findFirst({ where: { id, userId } })
   if (!cuenta) return { success: false, error: "Cuenta no encontrada" }
-  const [origenCount, destinoCount, metasCount] = await Promise.all([
-    prisma.movimiento.count({ where: { userId, cuentaOrigenId: id } }),
-    prisma.movimiento.count({ where: { userId, cuentaDestinoId: id } }),
+  const [movCount, metasCount] = await Promise.all([
+    prisma.movimiento.count({
+      where: { userId, OR: [{ cuentaOrigenId: id }, { cuentaDestinoId: id }] },
+    }),
     prisma.metaAhorro.count({ where: { userId, cuentaDestinoId: id } }),
   ])
-  if (origenCount > 0 || destinoCount > 0)
-    return { success: false, error: "No se puede eliminar: tiene movimientos asociados. Elimina o reasigna los movimientos primero." }
+  if (movCount > 0)
+    return { success: false, error: `No se puede eliminar: ${movCount} movimiento(s) usan esta cuenta` }
   if (metasCount > 0)
     return { success: false, error: "No se puede eliminar: tiene metas de ahorro asociadas. Cambia la cuenta destino de las metas primero." }
   await prisma.cuenta.delete({ where: { id } })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 
@@ -758,6 +760,7 @@ export async function createCategoria(
   const cat = await prisma.categoria.create({
     data: { userId, nombre: data.nombre, tipo: data.tipo, color: data.color, icono: data.icono },
   })
+  await invalidateUserCache(userId)
   return { success: true, id: cat.id }
 }
 
@@ -775,16 +778,18 @@ export async function updateCategoria(
   if (data.icono != null) updateData.icono = data.icono
   if (Object.keys(updateData).length === 0) return { success: true }
   await prisma.categoria.update({ where: { id }, data: updateData })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 
 export async function deleteCategoria(userId: string, id: string): Promise<Result<ResultOk>> {
   const cat = await prisma.categoria.findFirst({ where: { id, userId } })
   if (!cat) return { success: false, error: "Categoría no encontrada" }
-  const movCount = await prisma.movimiento.count({ where: { userId, categoriaId: id } })
+  const movCount = await prisma.movimiento.count({ where: { categoriaId: id, userId } })
   if (movCount > 0)
-    return { success: false, error: "No se puede eliminar: tiene movimientos asociados. Reasigna o elimina los movimientos primero." }
+    return { success: false, error: `No se puede eliminar: ${movCount} movimiento(s) usan esta categoría` }
   await prisma.categoria.delete({ where: { id } })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 
@@ -809,6 +814,7 @@ export async function createPresupuesto(
         montoPresupuestadoCLP: data.montoPresupuestadoCLP,
       },
     })
+    await invalidateUserCache(userId)
     return { success: true, id: pres.id }
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002")
@@ -835,6 +841,7 @@ export async function updatePresupuesto(
   if (Object.keys(updateData).length === 0) return { success: true }
   try {
     await prisma.presupuesto.update({ where: { id }, data: updateData })
+    await invalidateUserCache(userId)
     return { success: true }
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002")
@@ -847,6 +854,7 @@ export async function deletePresupuesto(userId: string, id: string): Promise<Res
   const pres = await prisma.presupuesto.findFirst({ where: { id, userId } })
   if (!pres) return { success: false, error: "Presupuesto no encontrado" }
   await prisma.presupuesto.delete({ where: { id } })
+  await invalidateUserCache(userId)
   return { success: true }
 }
 
@@ -990,6 +998,9 @@ export async function updateTarjetaCredito(
 export async function deleteTarjetaCredito(userId: string, id: string): Promise<Result<ResultOk>> {
   const tarjeta = await prisma.tarjetaCredito.findFirst({ where: { id, userId } })
   if (!tarjeta) return { success: false, error: "Tarjeta no encontrada" }
+  const movCount = await prisma.movimiento.count({ where: { userId, tarjetaCreditoId: id } })
+  if (movCount > 0)
+    return { success: false, error: `No se puede eliminar: ${movCount} movimiento(s) usan esta tarjeta` }
   await prisma.tarjetaCredito.delete({ where: { id } })
   await invalidateUserCache(userId)
   return { success: true }

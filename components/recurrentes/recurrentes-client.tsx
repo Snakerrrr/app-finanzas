@@ -13,6 +13,7 @@ import {
 import type { RecurringForClient } from "@/lib/services/recurring.service"
 import type { CategoriaForClient, CuentaForClient } from "@/lib/services/finance.service"
 import { useToast } from "@/hooks/use-toast"
+import { useData } from "@/lib/data-context"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ export function RecurrentesClient({ recurrentes, categorias, cuentas }: Recurren
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const { toast } = useToast()
+  const { refreshRecurrentes } = useData()
 
   const activos = recurrentes.filter((r) => r.activo)
   const inactivos = recurrentes.filter((r) => !r.activo)
@@ -59,6 +61,7 @@ export function RecurrentesClient({ recurrentes, categorias, cuentas }: Recurren
       if (result.success) {
         toast({ title: "Gasto recurrente creado", description: "Se ha registrado correctamente" })
         setFormOpen(false)
+        refreshRecurrentes()
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" })
       }
@@ -72,6 +75,7 @@ export function RecurrentesClient({ recurrentes, categorias, cuentas }: Recurren
       if (result.success) {
         toast({ title: "Gasto recurrente actualizado" })
         setEditItem(null)
+        refreshRecurrentes()
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" })
       }
@@ -81,7 +85,9 @@ export function RecurrentesClient({ recurrentes, categorias, cuentas }: Recurren
   const handleToggleActive = (id: string, activo: boolean) => {
     startTransition(async () => {
       const result = await updateRecurringTransaction(id, { activo })
-      if (!result.success) {
+      if (result.success) {
+        refreshRecurrentes()
+      } else {
         toast({ title: "Error", description: result.error, variant: "destructive" })
       }
     })
@@ -94,6 +100,7 @@ export function RecurrentesClient({ recurrentes, categorias, cuentas }: Recurren
       if (result.success) {
         toast({ title: "Gasto recurrente eliminado" })
         setDeleteId(null)
+        refreshRecurrentes()
       } else {
         toast({ title: "Error", description: result.error, variant: "destructive" })
       }

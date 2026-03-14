@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { useRouter } from "next/navigation"
+import { useData } from "@/lib/data-context"
 import { Users, Plus, UserPlus, Copy, Trash2, LogOut, Crown } from "lucide-react"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
@@ -41,8 +41,13 @@ interface FamiliaClientProps {
 
 export function FamiliaClient({ initialGroups, currentUserId }: FamiliaClientProps) {
   const { toast } = useToast()
-  const router = useRouter()
+  const { refreshFamilyGroups } = useData()
   const [groups, setGroups] = useState(initialGroups)
+
+  useEffect(() => {
+    setGroups(initialGroups)
+  }, [initialGroups])
+
   const [createOpen, setCreateOpen] = useState(false)
   const [joinOpen, setJoinOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -57,7 +62,7 @@ export function FamiliaClient({ initialGroups, currentUserId }: FamiliaClientPro
       setCreateOpen(false)
       setNewGroupName("")
       toast({ title: "Grupo creado", description: `Se creó el grupo "${result.group.nombre}"` })
-      router.refresh()
+      refreshFamilyGroups()
     } else {
       toast({ title: "Error", description: result.error, variant: "destructive" })
     }
@@ -71,7 +76,7 @@ export function FamiliaClient({ initialGroups, currentUserId }: FamiliaClientPro
       setJoinOpen(false)
       setJoinCode("")
       toast({ title: "Te uniste al grupo", description: `Ahora eres miembro de "${result.group.nombre}"` })
-      router.refresh()
+      refreshFamilyGroups()
     } else {
       toast({ title: "Error", description: result.error, variant: "destructive" })
     }
@@ -83,7 +88,7 @@ export function FamiliaClient({ initialGroups, currentUserId }: FamiliaClientPro
     if (result.success) {
       setGroups((prev) => prev.filter((g) => g.id !== deleteId))
       toast({ title: "Grupo eliminado" })
-      router.refresh()
+      refreshFamilyGroups()
     } else {
       toast({ title: "Error", description: result.error, variant: "destructive" })
     }
@@ -95,7 +100,7 @@ export function FamiliaClient({ initialGroups, currentUserId }: FamiliaClientPro
     if (result.success) {
       setGroups((prev) => prev.filter((g) => g.id !== groupId))
       toast({ title: "Saliste del grupo" })
-      router.refresh()
+      refreshFamilyGroups()
     } else {
       toast({ title: "Error", description: result.error, variant: "destructive" })
     }
